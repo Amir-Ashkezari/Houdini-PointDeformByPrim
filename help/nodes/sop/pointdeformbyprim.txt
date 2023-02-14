@@ -1,0 +1,26 @@
+#type: node
+#context: sop
+#internal: pointdeformbyprim
+#icon: /nodes/sop/SOP_PointDeformByPrim
+#version: 1.0
+#tags: deformation
+#since: 18.5
+
+= Point Deform By Prim =
+
+""" Point deformation based on capturing primtive position of another geometry stream provides more accurate lookup position. """
+
+This node deform(P) and interpolate(N, v, etc) the existing point attributes in the geometry based on another geometry stream.
+
+== Using Point Deform By Prim ==
+
+# Select the geometry node.
+
+# Put down an Point Deform By Prim node.
+
+# Connect second input to the rest geometry and third input to the deforming geometry, the rest/deforming geometry must be the same.
+
+@parameters
+
+@related
+- [Node:sop/pointdeform]
