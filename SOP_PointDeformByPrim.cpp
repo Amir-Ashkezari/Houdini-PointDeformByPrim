@@ -27,7 +27,8 @@ using namespace AKA;
 
 const UT_StringHolder SOP_PointDeformByPrim::theSOPTypeName("pointdeformbyprim"_sh);
 
-void newSopOperator(OP_OperatorTable* table)
+void
+newSopOperator(OP_OperatorTable* table)
 {
 	OP_Operator* op = new OP_Operator(
 		SOP_PointDeformByPrim::theSOPTypeName,
@@ -45,7 +46,8 @@ void newSopOperator(OP_OperatorTable* table)
     table->addOperator(op);         
 }
 
-const char* SOP_PointDeformByPrim::inputLabel(unsigned idx) const
+const char*
+SOP_PointDeformByPrim::inputLabel(unsigned idx) const
 {
 	switch (idx)
 	{
@@ -82,10 +84,9 @@ static const char* theDsFile = R"THEDSFILE(
         default { "0" }
         menu {
             "capturedeform"    "Capture and Deform"
-            "capture"          "Capture" 
-            "deform"           "Deform"
+            "capture"          "Capture"
 		}
-        help    "Normal operation of this node is to both capture points and deform. However, you can use this parameter to have the node only perform one of those operations. There is no speed difference to using one node to do both, or two nodes to do the two steps separately. The only reason you might want to change this is if you have a technical workflow where you want to use the capture information in another node before doing the deformation for some reason. \nNote that the capture attributes are included in the output if you turn off Delete Capture Attributes, so you don't need to use separate nodes if all you want is to use the capture attributes downstream."
+        help    "Normal operation of this node is to both capture points and deform. However, you can use this parameter to have the node only perform capturing operation. There is no speed difference to using one node to do both, or two nodes to do the two steps separately. The only reason you might want to change this is if you have a technical workflow where you want to use the capture information in another node before doing the deformation for some reason. \nNote In order to avoid computing capture attributes on every cook, the node will keep capture attributes for consecutive cooks unless there is change in the upstream geometries."
 	}
 	parm {
         name    "captureattribshalf"
@@ -93,7 +94,7 @@ static const char* theDsFile = R"THEDSFILE(
         label   "Capture Attributes 16-bit"
         type    toggle
         default { "1" }
-        help "Store capture attributes in 16-bit(half-float) instead 32-bit(float), in order to reduce memory footprint."
+        help    "In order to reduce memory footprint, by default capture attributes are stored as 16-bit(half-float) instead 32-bit(float)."
     }
 	groupsimple {
         name    "capture_folder"
@@ -104,8 +105,8 @@ static const char* theDsFile = R"THEDSFILE(
 			cppname "Radius"
             label   "Radius"
             type    float
-            default { "0.1" }
-            range   { 0 10 }
+            default { "0" }
+            range   { 0 5 }
 			help    "The maximum distance (in Houdini world units) away from each model point to look for nearby lattice points."
         }
         parm {
@@ -122,7 +123,7 @@ static const char* theDsFile = R"THEDSFILE(
             label   "Pre-Separate Pieces"
             type    toggle
             default { "1" }
-            help "Virtually move pieces apart (to ensure they don't overlap) before capturing. This can greatly reduce the cost of capturing if many pieces are close together."
+            help    "Virtually move pieces apart (to ensure they don't overlap) before capturing. This can greatly reduce the cost of capturing if many pieces are close together."
         }
 	
         hidewhen "{ mode == deform }"
@@ -141,7 +142,7 @@ R"THEDSFILE(
             label   "Rigid Projection"
             type    toggle
             default { "1" }
-            help "The computed local transforms may include a shear. This removes any shear, leaving only a rigid transform. You can try turning this parameter off or on to see how it affects the look of the deformation."
+            help    "The computed local transforms may include a shear. This removes any shear, leaving only a rigid transform. You can try turning this parameter off or on to see how it affects the look of the deformation."
         }
 		parm {
             name    "updateaffectednmls"
@@ -149,7 +150,7 @@ R"THEDSFILE(
             label   "Recompute Affected Normals"
             type    toggle
             default { "1" }
-            help "Recomputes any normals that are affected by polygons with both deformed and undeformed points. This only matters if you are deforming some points and not others. If you are deforming the whole geometry (or whole pieces), this has no effect, since the normals are transformed. \nIf P (point position) is not in the Attributes to Transform below, this has no effect."
+            help    "Recomputes any normals that are affected by polygons with both deformed and undeformed points. This only matters if you are deforming some points and not others. If you are deforming the whole geometry (or whole pieces), this has no effect, since the normals are transformed. \nIf P (point position) is not in the Attributes to Transform below, this has no effect."
         }
         parm {
             name    "attribs"
@@ -157,7 +158,7 @@ R"THEDSFILE(
             label   "Attributes to Transform"
             type    string
             default { "*" }
-            help "A space-separated list of attribute names/patterns, specifying which attributes are transformed by the deformation. The default is *, meaning all attributes. The node modifies vector attributes according to their type info, as points, vectors, or normals."
+            help    "A space-separated list of attribute names/patterns, specifying which attributes are transformed by the deformation. The default is *, meaning all attributes. The node modifies vector attributes according to their type info, as points, vectors, or normals."
         }
 	
         hidewhen "{ mode == capture }"
@@ -165,11 +166,12 @@ R"THEDSFILE(
 }
 )THEDSFILE";
 
-void SOP_PointDeformByPrim::genPointAttribList(void* thedata,
-											   PRM_Name* thechoicenames,
-											   int thelistsize,
-											   const PRM_SpareData* thespareptr,
-											   const PRM_Parm* theparm)
+void
+SOP_PointDeformByPrim::genPointAttribList(void* thedata,
+										  PRM_Name* thechoicenames,
+										  int thelistsize,
+										  const PRM_SpareData* thespareptr,
+										  const PRM_Parm* theparm)
 {
     SOP_Node* thesop = static_cast<SOP_Node*>(thedata);
     UT_ASSERT(thesop != nullptr);
@@ -204,7 +206,8 @@ void SOP_PointDeformByPrim::genPointAttribList(void* thedata,
 PRM_ChoiceList SOP_PointDeformByPrim::s_thePointAttribList(
     PRM_ChoiceListType::PRM_CHOICELIST_TOGGLE, &SOP_PointDeformByPrim::genPointAttribList);
 
-PRM_Template* SOP_PointDeformByPrim::buildTemplates()
+PRM_Template*
+SOP_PointDeformByPrim::buildTemplates()
 {
 	static PRM_TemplateBuilder templ("SOP_PointDeformByPrim.cpp"_sh, theDsFile);
 	if (templ.justBuilt())
@@ -216,7 +219,8 @@ PRM_Template* SOP_PointDeformByPrim::buildTemplates()
 	return templ.templates();
 }
 
-OP_Node* SOP_PointDeformByPrim::myConstructor(OP_Network* net, const char* name, OP_Operator* op)
+OP_Node*
+SOP_PointDeformByPrim::myConstructor(OP_Network* net, const char* name, OP_Operator* op)
 {
 	return new SOP_PointDeformByPrim(net, name, op);
 }
@@ -231,7 +235,8 @@ SOP_PointDeformByPrim::~SOP_PointDeformByPrim()
 {
 }
 
-OP_ERROR SOP_PointDeformByPrim::cookMySop(OP_Context& context)
+OP_ERROR
+SOP_PointDeformByPrim::cookMySop(OP_Context& context)
 {
 	return cookMyselfAsVerb(context);
 }
@@ -264,7 +269,12 @@ private:
 							  ThreadedPointDeform& thread_ptdeform) const;
 
 private:
+    static UT_StringHolder s_groupCache;
+    static int32 s_modeCache;
+    static bool s_halfFloatCache;
+    static fpreal32 s_radiusCache;
     static UT_StringHolder s_pieceAttribCache;
+    static bool s_preSeparateCache;
     static int32 s_baseMetaCacheCount;
 	static int32 s_restMetaCacheCount;
         
@@ -272,20 +282,27 @@ private:
 
 const SOP_NodeVerb::Register<SOP_PointDeformByPrimVerb> SOP_PointDeformByPrimVerb::theVerb;
 
+UT_StringHolder SOP_PointDeformByPrimVerb::s_groupCache = "";
+int32 SOP_PointDeformByPrimVerb::s_modeCache = 0;
+bool SOP_PointDeformByPrimVerb::s_halfFloatCache = true;
+fpreal32 SOP_PointDeformByPrimVerb::s_radiusCache = 0.f;
 UT_StringHolder SOP_PointDeformByPrimVerb::s_pieceAttribCache = "";
+bool SOP_PointDeformByPrimVerb::s_preSeparateCache = true;
 int32 SOP_PointDeformByPrimVerb::s_baseMetaCacheCount = -1;
 int32 SOP_PointDeformByPrimVerb::s_restMetaCacheCount = -1;
 
-const SOP_NodeVerb* SOP_PointDeformByPrim::cookVerb() const
+const SOP_NodeVerb*
+SOP_PointDeformByPrim::cookVerb() const
 {
 	return SOP_PointDeformByPrimVerb::theVerb.get();
 }
 
 template<typename T, typename V>
-void SOP_PointDeformByPrimVerb::captureClosestPointByPieceAttrib(const GU_Detail* restGdp,
-																 V pieceAttrib_h,
-																 V restPrimPieceAttrib_h,
-																 ThreadedPointDeform& thread_ptdeform) const
+void
+SOP_PointDeformByPrimVerb::captureClosestPointByPieceAttrib(const GU_Detail* restGdp,
+															V pieceAttrib_h,
+															V restPrimPieceAttrib_h,
+															ThreadedPointDeform& thread_ptdeform) const
 {
 	Timer t0("detachedgroup");
 	MapPrimGroup<T> primGroupMap;
@@ -325,10 +342,11 @@ void SOP_PointDeformByPrimVerb::captureClosestPointByPieceAttrib(const GU_Detail
 		primGroupMap.Map.at(kv.first)->clearEntries();
 }
 
-void SOP_PointDeformByPrimVerb::captureByPieceAttrib(GU_Detail* gdp,
-													 const CookParms& cookparms,
-													 const GA_AttributeOwner& attribOwner,
-													 ThreadedPointDeform& thread_ptdeform) const
+void
+SOP_PointDeformByPrimVerb::captureByPieceAttrib(GU_Detail* gdp,
+												const CookParms& cookparms,
+												const GA_AttributeOwner& attribOwner,
+												ThreadedPointDeform& thread_ptdeform) const
 {
 	auto&& sopparms = cookparms.parms<SOP_PointDeformByPrimParms>();
 	const GU_Detail* restGdp = cookparms.inputGeo(1);
@@ -433,9 +451,15 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 	}
 
     // get parms
+    const UT_StringHolder& groupParmData = sopparms.getGroup();
+	const int32 modeParmData = (int32)sopparms.getMode();
+    const bool captureAttribsHalfData = sopparms.getCaptureAttribsHalf();
+    const fpreal32 radiusParmData = sopparms.getRadius();
     const UT_StringHolder& pieceAttribParmData = sopparms.getPieceAttrib();
+    const bool preSeparateParmData = sopparms.getPreSeparatePieces();
+    const bool rigidProjParmData = sopparms.getRigidProjection();
+    const bool updateNrmlsParmData = sopparms.getUpdateAffectedNmls();
     const UT_StringHolder& attribParmData = sopparms.getAttribs();
-    bool captureAttribsHalfData = sopparms.getCaptureAttribsHalf();
 
 	// create/get attribs
 	const UT_StringHolder& restXfrom_name("__restXform");
@@ -444,8 +468,12 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 	const UT_StringHolder& hitUV_name("__hituvw");
 	HitAttributes hitAttribs;
 
-    bool reinitialize = s_baseMetaCacheCount != baseGdp->getMetaCacheCount() || 
+    bool reinitialize = 
+		s_baseMetaCacheCount != baseGdp->getMetaCacheCount() || 
         s_restMetaCacheCount != restGdp->getMetaCacheCount() ||
+		s_groupCache != groupParmData || s_modeCache != modeParmData ||
+		s_halfFloatCache != captureAttribsHalfData ||
+		s_radiusCache != radiusParmData || s_preSeparateCache != preSeparateParmData ||
         s_pieceAttribCache != pieceAttribParmData || gdp->isEmpty();
 
     if (reinitialize)
@@ -453,6 +481,11 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
         std::cout << "reinitiailzed!\n";
 		s_baseMetaCacheCount = baseGdp->getMetaCacheCount();
 		s_restMetaCacheCount = restGdp->getMetaCacheCount();
+		s_groupCache = groupParmData;
+		s_modeCache = modeParmData;
+		s_halfFloatCache = captureAttribsHalfData;
+		s_radiusCache = radiusParmData;
+		s_preSeparateCache = preSeparateParmData;
         s_pieceAttribCache = pieceAttribParmData;
 	    gdp->replaceWith(*baseGdp);
 
@@ -462,7 +495,7 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 		hitAttribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, restP_name, 3, (GA_Defaults)0.f, nullptr, nullptr, storage);
 		hitAttribs.RestP->setTypeInfo(GA_TYPE_POINT);
 		hitAttribs.Prim = gdp->addIntTuple(GA_ATTRIB_POINT, hitPrim_name, 1);
-		hitAttribs.Prim->setTypeInfo(GA_TYPE_ARITHMETIC_INTEGER);
+		hitAttribs.Prim->setTypeInfo(GA_TYPE_NONARITHMETIC_INTEGER);
 		hitAttribs.UV = gdp->addFloatTuple(GA_ATTRIB_POINT, hitUV_name, 2, (GA_Defaults)0.f, nullptr, nullptr, storage);
 		hitAttribs.UV->setTypeInfo(GA_TYPE_VECTOR);
     }
@@ -531,8 +564,9 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 			attribsToInterpolate.VtxAttribs.emplace_back(curAttrib);
 		}
 	}
-	
-	GA_SplittableRange ptrange(std::move(gdp->getPointRange()));
+
+	const GA_PointGroup* ptGroup = gdp->findPointGroup(groupParmData);
+	GA_SplittableRange ptrange(std::move(gdp->getPointRange(ptGroup)));
     ThreadedPointDeform thread_ptdeform(gdp, baseGdp, restGdp, deformedGdp, ptrange, hitAttribs, attribsToInterpolate);
 	
     if (reinitialize)
@@ -577,6 +611,9 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 		for (GA_Attribute* vtxAttrib : attribsToInterpolate.VtxAttribs)
 			vtxAttrib->bumpDataId();
     }
+
+	if (modeParmData)
+		return;
 	
 	thread_ptdeform.computeDeformation();
 	attribsToInterpolate.PAttrib->bumpDataId();

@@ -42,7 +42,8 @@ ThreadedPointDeform::ThreadedPointDeform(GU_Detail* gdp,
 		m_vtxAttribs_h.emplace_back(vtxAttrib);
 }
 
-void ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const UT_JobInfo& info)
+void
+ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const UT_JobInfo& info)
 {
 	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
 	{
@@ -64,7 +65,6 @@ void ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, c
 				trn_info.rot.invert();
 
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				//trn_info.pos.rowVecMult(UTverify_cast<UT_Matrix3F>(trn_info.rot));
 				trn_info.pos.rowVecMult(trn_info.rot);
 
 				m_restXform_h.set(ptoff, trn_info.rot);
@@ -76,9 +76,10 @@ void ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, c
 	}
 }
 
-void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI pieceAttrib_h,
-																  MapRay<int32> restPrimRays,
-																  const UT_JobInfo& info)
+void
+ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI pieceAttrib_h,
+															 MapRay<int32> restPrimRays,
+															 const UT_JobInfo& info)
 {
 	const GA_Attribute* pieceAttrib = pieceAttrib_h.getAttribute();
 	const GA_AttributeOwner& pieceAttribOwner = pieceAttrib->getOwner();
@@ -117,7 +118,6 @@ void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI p
 				trn_info.rot.invert();
 				
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				//trn_info.pos.rowVecMult(UTverify_cast<UT_Matrix3F>(trn_info.rot));
 				trn_info.pos.rowVecMult(trn_info.rot);
 				
 				m_restXform_h.set(ptoff, trn_info.rot);
@@ -129,9 +129,10 @@ void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI p
 	}
 }
 
-void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceAttrib_h,
-																  MapRay<UT_StringHolder> restPrimRays,
-																  const UT_JobInfo& info)
+void
+ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceAttrib_h,
+															 MapRay<UT_StringHolder> restPrimRays,
+															 const UT_JobInfo& info)
 {
 	const GA_Attribute* pieceAttrib = pieceAttrib_h.getAttribute();
 	const GA_AttributeOwner& pieceAttribOwner = pieceAttrib->getOwner();
@@ -170,7 +171,6 @@ void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS p
 				trn_info.rot.invert();
 				
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				//trn_info.pos.rowVecMult(UTverify_cast<UT_Matrix3F>(trn_info.rot));
 				trn_info.pos.rowVecMult(trn_info.rot);
 				
 				m_restXform_h.set(ptoff, trn_info.rot);
@@ -182,7 +182,8 @@ void ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS p
 	}
 }
 
-void ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
+void
+ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
 {
 	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
 	{
@@ -206,9 +207,7 @@ void ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
 				for (size_t idx = 0; idx < m_basePtAttribs_h.size(); ++idx)
 				{
 					vecAttrib = m_basePtAttribs_h[idx].get(ptoff);
-					//vecAttrib.rowVecMult(UTverify_cast<UT_Matrix3F>(m_restXform_h.get(ptoff)));
 					vecAttrib.rowVecMult(m_restXform_h.get(ptoff));
-					//vecAttrib.rowVecMult(UTverify_cast<UT_Matrix3F>(trn_info.rot));
 					vecAttrib.rowVecMult(trn_info.rot);
 				
 					m_ptAttribs_h[idx].set(ptoff, vecAttrib);
@@ -223,7 +222,8 @@ void ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
 	}
 }
 
-void ThreadedPointDeform::buildTransformationMatrix(TransformInfo&& trn_info)
+void
+ThreadedPointDeform::buildTransformationMatrix(TransformInfo&& trn_info)
 {
 	trn_info.geoprim->evaluateNormalVector(trn_info.primnml, trn_info.hituv.x(), trn_info.hituv.y());
 	trn_info.geoprim->evaluateInteriorPoint(trn_info.primpos, trn_info.hituv.x(), trn_info.hituv.y());

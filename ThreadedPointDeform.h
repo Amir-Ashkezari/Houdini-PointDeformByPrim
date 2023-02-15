@@ -40,11 +40,10 @@ public:
 
 		GA_Index hitprim;
 		UT_Vector2H hituv;
-		UT_Vector3F pos;
+		UT_Vector3H pos;
 		UT_Vector3F up;
 		UT_Vector3F primnml;
 		UT_Vector4F primpos;
-		//UT_Matrix3T<fpreal16> rot;
 		UT_Matrix3F rot;
 		const GEO_Primitive* geoprim;
 	};
@@ -72,7 +71,6 @@ private:
 	const GA_SplittableRange& m_ptrange;
 	GA_ROHandleV3 m_baseP_h;
 	GA_RWHandleV3 m_p_h;
-	//GA_RWHandleT<UT_Matrix3T<fpreal16>> m_restXform_h;
 	GA_RWHandleM3 m_restXform_h;
 	GA_RWHandleT<UT_Vector3H> m_restP_h;
 	GA_RWHandleI m_hitPrim_h;
