@@ -2,7 +2,6 @@
 #include "SOP_PointDeformByPrim.proto.h"
 #include "ThreadedPointDeform.h"
 #include "Utils.h"
-#include "Timer.h"
 
 #include <SOP/SOP_NodeVerb.h>
 #include <GU/GU_Detail.h>
@@ -241,6 +240,11 @@ SOP_PointDeformByPrim::cookMySop(OP_Context& context)
 	return cookMyselfAsVerb(context);
 }
 
+int SOP_PointDeformByPrim::isRefInput(unsigned i) const
+{
+	return false;
+}
+
 class SOP_PointDeformByPrimVerb : public SOP_NodeVerb
 {
 public:
@@ -304,7 +308,6 @@ SOP_PointDeformByPrimVerb::captureClosestPointByPieceAttrib(const GU_Detail* res
 															V restPrimPieceAttrib_h,
 															ThreadedPointDeform& thread_ptdeform) const
 {
-	Timer t0("detachedgroup");
 	MapPrimGroup<T> primGroupMap;
 	GA_Range restPrimRange(std::move(restGdp->getPrimitiveRange()));
 
@@ -320,20 +323,15 @@ SOP_PointDeformByPrimVerb::captureClosestPointByPieceAttrib(const GU_Detail* res
 		else
 			primGroupMap.Map.at(attribValue)->addOffset(*primIt);
 	}
-	t0.stop();
 
-	Timer t1("map_rays");
 	MapRay<T> restPrimRays;
 	for (auto& kv : primGroupMap.Map)
 	{
 		GU_RayIntersect* ray = new GU_RayIntersect(restGdp, kv.second, true, false, true);
 		restPrimRays.Map[kv.first] = ray;
 	}
-	t1.stop();
 
-	Timer t2("execute");
 	thread_ptdeform.captureClosestPointByPieceAttrib(pieceAttrib_h, restPrimRays);
-	t2.stop();
 
 	for (auto& kv : restPrimRays.Map)
 		delete restPrimRays.Map.at(kv.first);
@@ -451,15 +449,15 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 	}
 
     // get parms
-    const UT_StringHolder& groupParmData = sopparms.getGroup();
-	const int32 modeParmData = (int32)sopparms.getMode();
-    const bool captureAttribsHalfData = sopparms.getCaptureAttribsHalf();
-    const fpreal32 radiusParmData = sopparms.getRadius();
-    const UT_StringHolder& pieceAttribParmData = sopparms.getPieceAttrib();
-    const bool preSeparateParmData = sopparms.getPreSeparatePieces();
-    const bool rigidProjParmData = sopparms.getRigidProjection();
-    const bool updateNrmlsParmData = sopparms.getUpdateAffectedNmls();
-    const UT_StringHolder& attribParmData = sopparms.getAttribs();
+	const UT_StringHolder& groupparm = sopparms.getGroup();
+	const int32 modeparm = (int32)sopparms.getMode();
+	const bool halffloatparm = sopparms.getCaptureAttribsHalf();
+	const fpreal32 radiusparm = sopparms.getRadius();
+	const UT_StringHolder& pieceparm = sopparms.getPieceAttrib();
+	const bool preseparateparm = sopparms.getPreSeparatePieces();
+    const bool rigidprojparm = sopparms.getRigidProjection();
+    const bool updatenmlsparm = sopparms.getUpdateAffectedNmls();
+    const UT_StringHolder& attribsparm = sopparms.getAttribs();
 
 	// create/get attribs
 	const UT_StringHolder& restXfrom_name("__restXform");
@@ -471,25 +469,24 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
     bool reinitialize = 
 		s_baseMetaCacheCount != baseGdp->getMetaCacheCount() || 
         s_restMetaCacheCount != restGdp->getMetaCacheCount() ||
-		s_groupCache != groupParmData || s_modeCache != modeParmData ||
-		s_halfFloatCache != captureAttribsHalfData ||
-		s_radiusCache != radiusParmData || s_preSeparateCache != preSeparateParmData ||
-        s_pieceAttribCache != pieceAttribParmData || gdp->isEmpty();
+		s_groupCache != groupparm || s_modeCache != modeparm ||
+		s_halfFloatCache != halffloatparm ||
+		s_radiusCache != radiusparm || s_preSeparateCache != preseparateparm ||
+        s_pieceAttribCache != pieceparm || gdp->isEmpty();
 
     if (reinitialize)
     {
-        std::cout << "reinitiailzed!\n";
 		s_baseMetaCacheCount = baseGdp->getMetaCacheCount();
 		s_restMetaCacheCount = restGdp->getMetaCacheCount();
-		s_groupCache = groupParmData;
-		s_modeCache = modeParmData;
-		s_halfFloatCache = captureAttribsHalfData;
-		s_radiusCache = radiusParmData;
-		s_preSeparateCache = preSeparateParmData;
-        s_pieceAttribCache = pieceAttribParmData;
+		s_groupCache = groupparm;
+		s_modeCache = modeparm;
+		s_halfFloatCache = halffloatparm;
+		s_radiusCache = radiusparm;
+		s_preSeparateCache = preseparateparm;
+        s_pieceAttribCache = pieceparm;
 	    gdp->replaceWith(*baseGdp);
 
-		const GA_Storage& storage= captureAttribsHalfData ? GA_STORE_REAL16 : GA_STORE_REAL32;
+		const GA_Storage& storage= halffloatparm ? GA_STORE_REAL16 : GA_STORE_REAL32;
 		hitAttribs.Xform = gdp->addFloatTuple(GA_ATTRIB_POINT, restXfrom_name, 9, (GA_Defaults)0.f, nullptr, nullptr, storage);
 		hitAttribs.Xform->setTypeInfo(GA_TYPE_TRANSFORM);
 		hitAttribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, restP_name, 3, (GA_Defaults)0.f, nullptr, nullptr, storage);
@@ -521,7 +518,7 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 	const GA_AttributeSet& baseAttribs = baseGdp->getAttributes();
 	const GA_AttributeSet& attribs = gdp->getAttributes();
 
-	if (attribParmData == "*")
+	if (attribsparm == "*")
 	{
 		UT_Array<GA_TypeInfo> allowableType{ GA_TYPE_POINT, GA_TYPE_VECTOR, GA_TYPE_NORMAL };
 		UT_Array<UT_StringHolder> excludingNames{ "P", restXfrom_name, hitUV_name};
@@ -565,21 +562,21 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 		}
 	}
 
-	const GA_PointGroup* ptGroup = gdp->findPointGroup(groupParmData);
+	const GA_PointGroup* ptGroup = gdp->findPointGroup(groupparm);
 	GA_SplittableRange ptrange(std::move(gdp->getPointRange(ptGroup)));
     ThreadedPointDeform thread_ptdeform(gdp, baseGdp, restGdp, deformedGdp, ptrange, hitAttribs, attribsToInterpolate);
 	
     if (reinitialize)
     {
-        if (pieceAttribParmData)
+        if (pieceparm)
         {
-			if (restGdp->findPrimitiveAttribute(pieceAttribParmData))
+			if (restGdp->findPrimitiveAttribute(pieceparm))
 			{
-				if (gdp->findAttribute(GA_ATTRIB_PRIMITIVE, pieceAttribParmData))
+				if (gdp->findAttribute(GA_ATTRIB_PRIMITIVE, pieceparm))
 				{
 					captureByPieceAttrib(gdp, cookparms, GA_ATTRIB_PRIMITIVE, thread_ptdeform);
 				}
-				else if (gdp->findAttribute(GA_ATTRIB_POINT, pieceAttribParmData))
+				else if (gdp->findAttribute(GA_ATTRIB_POINT, pieceparm))
 				{
 					captureByPieceAttrib(gdp, cookparms, GA_ATTRIB_POINT, thread_ptdeform);
 				}
@@ -612,10 +609,10 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 			vtxAttrib->bumpDataId();
     }
 
-	if (modeParmData)
+	if (modeparm)
 		return;
 	
-	thread_ptdeform.computeDeformation();
+	thread_ptdeform.computeDeformation(rigidprojparm);
 	attribsToInterpolate.PAttrib->bumpDataId();
 	
 	for (GA_Attribute* ptAttrib : attribsToInterpolate.PtAttribs)

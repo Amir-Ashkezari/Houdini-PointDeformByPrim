@@ -183,7 +183,7 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceA
 }
 
 void
-ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
+ThreadedPointDeform::computeDeformationPartial(const bool rigidprojection, const UT_JobInfo& info)
 {
 	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
 	{
@@ -202,7 +202,7 @@ ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo& info)
 				trn_info.geoprim = m_deformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
 
 				buildTransformationMatrix(std::move(trn_info));
-				
+
 				UT_Vector3 vecAttrib;
 				for (size_t idx = 0; idx < m_basePtAttribs_h.size(); ++idx)
 				{

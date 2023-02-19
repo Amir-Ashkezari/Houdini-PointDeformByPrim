@@ -57,8 +57,8 @@ public:
 	THREADED_METHOD2(ThreadedPointDeform, m_ptrange.canMultiThread(), captureClosestPointByPieceAttrib, GA_ROHandleS, pieceAttrib_h, MapRay<UT_StringHolder>, restPrimRays);
 	void captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceAttrib_h, MapRay<UT_StringHolder> restPrimRays, const UT_JobInfo& info);
 
-	THREADED_METHOD(ThreadedPointDeform, m_ptrange.canMultiThread(), computeDeformation);
-	void computeDeformationPartial(const UT_JobInfo& info);
+	THREADED_METHOD1(ThreadedPointDeform, m_ptrange.canMultiThread(), computeDeformation, const bool, rigidprojection);
+	void computeDeformationPartial(const bool rigidprojection, const UT_JobInfo& info);
 
 protected:
 	void buildTransformationMatrix(TransformInfo&& trn_info);

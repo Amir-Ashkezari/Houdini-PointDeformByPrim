@@ -27,6 +27,8 @@ protected:
 
 	OP_ERROR cookMySop(OP_Context& context) override;
 
+	virtual int isRefInput(unsigned i) const override;
+
 private:
 	static void genPointAttribList(void* thedata,
 								   PRM_Name* thechoicenames,
