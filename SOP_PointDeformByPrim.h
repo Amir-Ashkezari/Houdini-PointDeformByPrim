@@ -30,13 +30,7 @@ protected:
 	virtual int isRefInput(unsigned i) const override;
 
 private:
-	static void genPointAttribList(void* thedata,
-								   PRM_Name* thechoicenames,
-								   int thelistsize,
-								   const PRM_SpareData* thespareptr,
-								   const PRM_Parm* theparm);
-
-	static PRM_ChoiceList s_thePointAttribList;
+	static PRM_ChoiceList s_pointattriblist;
 
 };
 

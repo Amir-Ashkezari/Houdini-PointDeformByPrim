@@ -1,8 +1,5 @@
 #include <GU/GU_Detail.h>
 #include <GU/GU_RayIntersect.h>
-#include <UT/UT_Vector3.h>
-#include <UT/UT_Matrix3.h>
-#include <UT/UT_Matrix4.h>
 #include <UT/UT_Assert.h>
 
 #include "ThreadedPointDeform.h"
@@ -11,41 +8,41 @@
 using namespace AKA;
 
 ThreadedPointDeform::ThreadedPointDeform(GU_Detail* gdp,
-										 const GU_Detail* baseGdp,
-										 const GU_Detail* restGdp,
-										 const GU_Detail* deformedGdp,
+										 const GU_Detail* base_gdp,
+										 const GU_Detail* rest_gdp,
+										 const GU_Detail* deformed_gdp,
 										 const GA_SplittableRange& ptrange,
-										 HitAttributes& hitAttribs,
-										 AttribsToInterpolate& attribsToInterpolate)
-	: m_gdp(gdp)
-	, m_baseGdp(baseGdp)
-	, m_restGdp(restGdp)
-	, m_deformedGdp(deformedGdp)
-	, m_ptrange(ptrange)
-	, m_baseP_h(attribsToInterpolate.BasePAttrib)
-	, m_p_h(attribsToInterpolate.PAttrib)
-	, m_restXform_h(hitAttribs.Xform)
-	, m_restP_h(hitAttribs.RestP)
-	, m_hitPrim_h(hitAttribs.Prim)
-	, m_hitUV_h(hitAttribs.UV)
+										 HitAttributes& hit_attribs,
+										 AttribsToInterpolate& attribs_to_interpolate)
+	: myGdp(gdp)
+	, myBaseGdp(base_gdp)
+	, myRestGdp(rest_gdp)
+	, myDeformedGdp(deformed_gdp)
+	, myPtRange(ptrange)
+	, myBasePh(attribs_to_interpolate.BasePAttrib)
+	, myPh(attribs_to_interpolate.PAttrib)
+	, myRestXformh(hit_attribs.Xform)
+	, myRestPh(hit_attribs.RestP)
+	, myHitPrimh(hit_attribs.Prim)
+	, myHitUVh(hit_attribs.UV)
 {
-	for (const GA_Attribute* basePtAttrib : attribsToInterpolate.BasePtAttribs)
-		m_basePtAttribs_h.emplace_back(basePtAttrib);
+	for (const GA_Attribute* basePtAttrib : attribs_to_interpolate.BasePtAttribs)
+		myBasePtAttribsh.emplace_back(basePtAttrib);
 
-	for (GA_Attribute* ptAttrib : attribsToInterpolate.PtAttribs)
-		m_ptAttribs_h.emplace_back(ptAttrib);
+	for (GA_Attribute* ptAttrib : attribs_to_interpolate.PtAttribs)
+		myPtAttribsh.emplace_back(ptAttrib);
 
-	for (const GA_Attribute* baseVtxAttrib : attribsToInterpolate.BaseVtxAttribs)
-		m_baseVtxAttribs_h.emplace_back(baseVtxAttrib);
+	for (const GA_Attribute* baseVtxAttrib : attribs_to_interpolate.BaseVtxAttribs)
+		myBaseVtxAttribsh.emplace_back(baseVtxAttrib);
 
-	for (GA_Attribute* vtxAttrib : attribsToInterpolate.VtxAttribs)
-		m_vtxAttribs_h.emplace_back(vtxAttrib);
+	for (GA_Attribute* vtxAttrib : attribs_to_interpolate.VtxAttribs)
+		myVtxAttribsh.emplace_back(vtxAttrib);
 }
 
 void
 ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const UT_JobInfo& info)
 {
-	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 		for (GA_Iterator it(pit.begin()); it.blockAdvance(start, end);)
@@ -55,9 +52,9 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const 
 
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
-				ray_gdp.minimumPoint(m_baseP_h.get(ptoff), min_info);
+				ray_gdp.minimumPoint(myBasePh.get(ptoff), min_info);
 
-				trn_info.pos = m_baseP_h.get(ptoff);
+				trn_info.pos = myBasePh.get(ptoff);
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
@@ -67,24 +64,24 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const 
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
 				trn_info.pos.rowVecMult(trn_info.rot);
 
-				m_restXform_h.set(ptoff, trn_info.rot);
-				m_restP_h.set(ptoff, trn_info.pos);
-				m_hitPrim_h.set(ptoff, min_info.prim->getMapIndex());
-				m_hitUV_h.set(ptoff, trn_info.hituv);
+				myRestXformh.set(ptoff, trn_info.rot);
+				myRestPh.set(ptoff, trn_info.pos);
+				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
+				myHitUVh.set(ptoff, trn_info.hituv);
 			}
 		}
 	}
 }
 
 void
-ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI pieceAttrib_h,
-															 MapRay<int32> restPrimRays,
+ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI piece_attrib_h,
+															 MapRay<int32> rest_prim_rays,
 															 const UT_JobInfo& info)
 {
-	const GA_Attribute* pieceAttrib = pieceAttrib_h.getAttribute();
+	const GA_Attribute* pieceAttrib = piece_attrib_h.getAttribute();
 	const GA_AttributeOwner& pieceAttribOwner = pieceAttrib->getOwner();
 
-	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 
@@ -92,25 +89,25 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI pieceA
 		{
 			TransformInfo trn_info;
 			GU_MinInfo min_info(1e+3F, 1e-2F, 1);
-			int32 pieceAttribVal;
+			int32 piece_attrib_val;
 			GA_OffsetArray prims;
 
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
 				if (pieceAttribOwner == GA_ATTRIB_PRIMITIVE)
 				{
-					m_gdp->getPrimitivesReferencingPoint(prims, ptoff);
-					pieceAttribVal = pieceAttrib_h.get(prims[0]);
+					myGdp->getPrimitivesReferencingPoint(prims, ptoff);
+					piece_attrib_val = piece_attrib_h.get(prims[0]);
 				}
 				else
-					pieceAttribVal = pieceAttrib_h.get(ptoff);
+					piece_attrib_val = piece_attrib_h.get(ptoff);
 
-				if (restPrimRays.Map.find(pieceAttribVal) == restPrimRays.Map.end())
+				if (rest_prim_rays.Map.find(piece_attrib_val) == rest_prim_rays.Map.end())
 					continue;
 
-				restPrimRays.Map.at(pieceAttribVal)->minimumPoint(m_p_h.get(ptoff), min_info);
+				rest_prim_rays.Map.at(piece_attrib_val)->minimumPoint(myPh.get(ptoff), min_info);
 
-				trn_info.pos = m_baseP_h.get(ptoff);
+				trn_info.pos = myBasePh.get(ptoff);
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
@@ -120,24 +117,24 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI pieceA
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
 				trn_info.pos.rowVecMult(trn_info.rot);
 				
-				m_restXform_h.set(ptoff, trn_info.rot);
-				m_restP_h.set(ptoff, trn_info.pos);
-				m_hitPrim_h.set(ptoff, min_info.prim->getMapIndex());
-				m_hitUV_h.set(ptoff, trn_info.hituv);
+				myRestXformh.set(ptoff, trn_info.rot);
+				myRestPh.set(ptoff, trn_info.pos);
+				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
+				myHitUVh.set(ptoff, trn_info.hituv);
 			}
 		}
 	}
 }
 
 void
-ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceAttrib_h,
-															 MapRay<UT_StringHolder> restPrimRays,
+ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_attrib_h,
+															 MapRay<UT_StringHolder> rest_prim_rays,
 															 const UT_JobInfo& info)
 {
-	const GA_Attribute* pieceAttrib = pieceAttrib_h.getAttribute();
+	const GA_Attribute* pieceAttrib = piece_attrib_h.getAttribute();
 	const GA_AttributeOwner& pieceAttribOwner = pieceAttrib->getOwner();
 
-	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 
@@ -145,25 +142,25 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceA
 		{
 			TransformInfo trn_info;
 			GU_MinInfo min_info(1e+3F, 1e-2F, 1);
-			UT_StringHolder pieceAttribVal;
+			UT_StringHolder piece_attrib_val;
 			GA_OffsetArray prims;
 
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
 				if (pieceAttribOwner == GA_ATTRIB_PRIMITIVE)
 				{
-					m_gdp->getPrimitivesReferencingPoint(prims, ptoff);
-					pieceAttribVal = pieceAttrib_h.get(prims[0]);
+					myGdp->getPrimitivesReferencingPoint(prims, ptoff);
+					piece_attrib_val = piece_attrib_h.get(prims[0]);
 				}
 				else
-					pieceAttribVal = pieceAttrib_h.get(ptoff);
+					piece_attrib_val = piece_attrib_h.get(ptoff);
 
-				if (restPrimRays.Map.find(pieceAttribVal) == restPrimRays.Map.end())
+				if (rest_prim_rays.Map.find(piece_attrib_val) == rest_prim_rays.Map.end())
 					continue;
 
-				restPrimRays.Map.at(pieceAttribVal)->minimumPoint(m_p_h.get(ptoff), min_info);
+				rest_prim_rays.Map.at(piece_attrib_val)->minimumPoint(myPh.get(ptoff), min_info);
 
-				trn_info.pos = m_baseP_h.get(ptoff);
+				trn_info.pos = myBasePh.get(ptoff);
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
@@ -173,19 +170,19 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS pieceA
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
 				trn_info.pos.rowVecMult(trn_info.rot);
 				
-				m_restXform_h.set(ptoff, trn_info.rot);
-				m_restP_h.set(ptoff, trn_info.pos);
-				m_hitPrim_h.set(ptoff, min_info.prim->getMapIndex());
-				m_hitUV_h.set(ptoff, trn_info.hituv);
+				myRestXformh.set(ptoff, trn_info.rot);
+				myRestPh.set(ptoff, trn_info.pos);
+				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
+				myHitUVh.set(ptoff, trn_info.hituv);
 			}
 		}
 	}
 }
 
 void
-ThreadedPointDeform::computeDeformationPartial(const bool rigidprojection, const UT_JobInfo& info)
+ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, const UT_JobInfo& info)
 {
-	for (GA_PageIterator pit = m_ptrange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 		for (GA_Iterator it(pit.begin()); it.blockAdvance(start, end);)
@@ -194,29 +191,29 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigidprojection, const
 			
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
-				trn_info.pos = m_restP_h.get(ptoff);
-				trn_info.hitprim = m_hitPrim_h.get(ptoff);
-				trn_info.hituv = m_hitUV_h.get(ptoff);
+				trn_info.pos = myRestPh.get(ptoff);
+				trn_info.hitprim = myHitPrimh.get(ptoff);
+				trn_info.hituv = myHitUVh.get(ptoff);
 
-				const GA_IndexMap& prim_map = m_deformedGdp->getIndexMap(GA_ATTRIB_PRIMITIVE);
-				trn_info.geoprim = m_deformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
+				const GA_IndexMap& prim_map = myDeformedGdp->getIndexMap(GA_ATTRIB_PRIMITIVE);
+				trn_info.geoprim = myDeformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
 
 				buildTransformationMatrix(std::move(trn_info));
 
 				UT_Vector3 vecAttrib;
-				for (size_t idx = 0; idx < m_basePtAttribs_h.size(); ++idx)
+				for (size_t idx = 0; idx < myBasePtAttribsh.size(); ++idx)
 				{
-					vecAttrib = m_basePtAttribs_h[idx].get(ptoff);
-					vecAttrib.rowVecMult(m_restXform_h.get(ptoff));
+					vecAttrib = myBasePtAttribsh[idx].get(ptoff);
+					vecAttrib.rowVecMult(myRestXformh.get(ptoff));
 					vecAttrib.rowVecMult(trn_info.rot);
-				
-					m_ptAttribs_h[idx].set(ptoff, vecAttrib);
+
+					myPtAttribsh[idx].set(ptoff, vecAttrib);
 				}
 				
 				trn_info.pos.rowVecMult(trn_info.rot);
 				trn_info.pos += UTverify_cast<UT_Vector3F>(trn_info.primpos);
 				
-				m_p_h.set(ptoff, trn_info.pos);
+				myPh.set(ptoff, trn_info.pos);
 			}
 		}
 	}
