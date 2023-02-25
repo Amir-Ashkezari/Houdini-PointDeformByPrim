@@ -42,6 +42,13 @@ struct HitAttributes
 	GA_Attribute* UV;
 };
 
+struct DriveAttribs
+{
+	bool Drive;
+	GA_Attribute* Normal;
+	GA_Attribute* Up;
+};
+
 } // end AKA
 
 #endif

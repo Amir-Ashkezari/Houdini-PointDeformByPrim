@@ -58,7 +58,7 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect& ray_gdp, const 
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
-				buildTransformationMatrix(std::move(trn_info));
+				buildTransformationMatrix(trn_info);
 				trn_info.rot.invert();
 
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
@@ -111,7 +111,7 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI piece_
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
-				buildTransformationMatrix(std::move(trn_info));
+				buildTransformationMatrix(trn_info);
 				trn_info.rot.invert();
 				
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
@@ -164,7 +164,7 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_
 				trn_info.hituv = { min_info.u1, min_info.v1 };
 				trn_info.geoprim = min_info.prim;
 
-				buildTransformationMatrix(std::move(trn_info));
+				buildTransformationMatrix(trn_info);
 				trn_info.rot.invert();
 				
 				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
@@ -198,7 +198,7 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, cons
 				const GA_IndexMap& prim_map = myDeformedGdp->getIndexMap(GA_ATTRIB_PRIMITIVE);
 				trn_info.geoprim = myDeformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
 
-				buildTransformationMatrix(std::move(trn_info));
+				buildTransformationMatrix(trn_info);
 
 				UT_Vector3 vecAttrib;
 				for (size_t idx = 0; idx < myBasePtAttribsh.size(); ++idx)
@@ -220,7 +220,7 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, cons
 }
 
 void
-ThreadedPointDeform::buildTransformationMatrix(TransformInfo&& trn_info)
+ThreadedPointDeform::buildTransformationMatrix(TransformInfo& trn_info)
 {
 	trn_info.geoprim->evaluateNormalVector(trn_info.primnml, trn_info.hituv.x(), trn_info.hituv.y());
 	trn_info.geoprim->evaluateInteriorPoint(trn_info.primpos, trn_info.hituv.x(), trn_info.hituv.y());

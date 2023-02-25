@@ -61,7 +61,7 @@ public:
 	void computeDeformationPartial(const bool rigid_projection, const UT_JobInfo& info);
 
 protected:
-	void buildTransformationMatrix(TransformInfo&& trn_info);
+	void buildTransformationMatrix(TransformInfo& trn_info);
 
 private:
 	GU_Detail* myGdp = nullptr;

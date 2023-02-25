@@ -18,6 +18,7 @@
 #include <UT/UT_Interrupt.h>
 #include <UT/UT_Vector.h>
 #include <UT/UT_Assert.h>
+#include <UT/UT_SysSpecific.h>
 #include <SYS/SYS_Math.h>
 #include <iostream>
 #include <limits.h>
@@ -96,6 +97,36 @@ static const char* theDsFile = R"THEDSFILE(
         default { "1" }
         help    "In order to reduce memory footprint, by default capture attributes are stored as 16-bit(half-float) instead 32-bit(float)."
     }
+	parm {
+        name    "drivebyattribs"
+		cppname "DriveByAttribs"
+        label   "Drive By Attribs"
+        type    toggle
+        default { "0" }
+        help    "Use normal/up vector from Rest/Deformed geomerty streams to drive the deformation."
+    }
+	parm {
+        name    "normalattrib"
+		cppname "NormalAttrib"
+        label   "Normal Attrib"
+        type    string
+        default { "N" }
+        help    "Normal vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
+
+		hidewhen    "{ drivebyattribs == 0 }"
+		disablewhen "{ drivebyattribs == 0 }"
+    }
+	parm {
+        name    "upattrib"
+		cppname "UpAttrib"
+        label   "Up Attrib"
+        type    string
+        default { "up" }
+        help    "Up vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
+
+		hidewhen    "{ drivebyattribs == 0 }"
+		disablewhen "{ drivebyattribs == 0 }"
+    }
 	groupsimple {
         name    "capture_folder"
         label   "Capture"
@@ -125,8 +156,6 @@ static const char* theDsFile = R"THEDSFILE(
             default { "1" }
             help    "Virtually move pieces apart (to ensure they don't overlap) before capturing. This can greatly reduce the cost of capturing if many pieces are close together."
         }
-	
-        hidewhen "{ mode == deform }"
 	}
 )THEDSFILE"
 // ==== This is necessary because MSVC++ has a limit of 16380 character per
@@ -264,6 +293,8 @@ public:
 	static const SOP_NodeVerb::Register<SOP_PointDeformByPrimVerb> theVerb;
 
 private:
+	bool parmsChanged(const CookParms& cookparms) const;
+
 	template<typename T, typename V>
 	void captureClosestPointByPieceAttrib(const GU_Detail* rest_gdp,
 										  V pieceAttrib_h,
@@ -276,12 +307,7 @@ private:
 							  ThreadedPointDeform& thread_ptdeform) const;
 
 private:
-    static UT_StringHolder s_cache_group;
-    static int32 s_cache_mode;
-    static bool s_cache_half_float;
-    static fpreal32 s_cache_radius;
-    static UT_StringHolder s_cache_piece_attrib;
-    static bool s_cache_pre_separate;
+	static UT_OStringStream s_cache_parms_stream;
     static int32 s_cache_base_meta_count;
 	static int32 s_cache_rest_meta_count;
         
@@ -289,12 +315,7 @@ private:
 
 const SOP_NodeVerb::Register<SOP_PointDeformByPrimVerb> SOP_PointDeformByPrimVerb::theVerb;
 
-UT_StringHolder SOP_PointDeformByPrimVerb::s_cache_group = "";
-int32 SOP_PointDeformByPrimVerb::s_cache_mode = 0;
-bool SOP_PointDeformByPrimVerb::s_cache_half_float = true;
-fpreal32 SOP_PointDeformByPrimVerb::s_cache_radius = 0.f;
-UT_StringHolder SOP_PointDeformByPrimVerb::s_cache_piece_attrib = "";
-bool SOP_PointDeformByPrimVerb::s_cache_pre_separate = true;
+UT_OStringStream SOP_PointDeformByPrimVerb::s_cache_parms_stream;
 int32 SOP_PointDeformByPrimVerb::s_cache_base_meta_count = -1;
 int32 SOP_PointDeformByPrimVerb::s_cache_rest_meta_count = -1;
 
@@ -302,6 +323,32 @@ const SOP_NodeVerb*
 SOP_PointDeformByPrim::cookVerb() const
 {
 	return SOP_PointDeformByPrimVerb::theVerb.get();
+}
+
+bool
+SOP_PointDeformByPrimVerb::parmsChanged(const CookParms& cookparms) const
+{
+	const SOP_PointDeformByPrimParms& sopparms = cookparms.parms<SOP_PointDeformByPrimParms>();
+
+	UT_OStringStream oss;
+	oss << sopparms.getGroup();
+	oss << UTstatic_cast(int32, sopparms.getMode());
+	oss << sopparms.getCaptureAttribsHalf();
+	oss << sopparms.getDriveByAttribs();
+	oss << sopparms.getNormalAttrib();
+	oss << sopparms.getUpAttrib();
+	oss << sopparms.getRadius();
+	oss << sopparms.getPieceAttrib();
+	oss << sopparms.getPreSeparatePieces();
+
+	bool result = oss.str().strcmp(s_cache_parms_stream.str().buffer()) == 0 ? false : true;
+	if (result)
+	{
+		s_cache_parms_stream.reset();
+		s_cache_parms_stream << oss.str();
+	}
+
+	return result;
 }
 
 template<typename T, typename V>
@@ -445,8 +492,11 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 
     // get parms
 	const UT_StringHolder& group_parm = sopparms.getGroup();
-	const int32 mode_parm = (int32)sopparms.getMode();
+	const int32 mode_parm = UTstatic_cast(int32, sopparms.getMode());
 	const bool half_float_parm = sopparms.getCaptureAttribsHalf();
+	const bool drive_by_attribs = sopparms.getDriveByAttribs();
+	const UT_StringHolder& normal_attrib_parm = sopparms.getNormalAttrib();
+	const UT_StringHolder& up_attrib_parm = sopparms.getUpAttrib();
 	const fpreal32 radius_parm = sopparms.getRadius();
 	const UT_StringHolder& piece_parm = sopparms.getPieceAttrib();
 	const bool pre_separate_parm = sopparms.getPreSeparatePieces();
@@ -461,24 +511,15 @@ void SOP_PointDeformByPrimVerb::cook(const CookParms& cookparms) const
 	const UT_StringHolder& hit_uv_name("__hit_uv");
 	HitAttributes hit_attribs;
 
-    bool reinitialize = 
-		s_cache_base_meta_count != base_gdp->getMetaCacheCount() || 
-        s_cache_rest_meta_count != rest_gdp->getMetaCacheCount() ||
-		s_cache_group != group_parm || s_cache_mode != mode_parm ||
-		s_cache_half_float != half_float_parm ||
-		s_cache_radius != radius_parm || s_cache_pre_separate != pre_separate_parm ||
-        s_cache_piece_attrib != piece_parm || gdp->isEmpty();
+	bool changed = parmsChanged(cookparms);
+	bool reinitialize = gdp->isEmpty() || changed ||
+		s_cache_base_meta_count != base_gdp->getMetaCacheCount() ||
+		s_cache_rest_meta_count != rest_gdp->getMetaCacheCount();
 
     if (reinitialize)
     {
 		s_cache_base_meta_count = base_gdp->getMetaCacheCount();
 		s_cache_rest_meta_count = rest_gdp->getMetaCacheCount();
-		s_cache_group = group_parm;
-		s_cache_mode = mode_parm;
-		s_cache_half_float = half_float_parm;
-		s_cache_radius = radius_parm;
-		s_cache_pre_separate = pre_separate_parm;
-        s_cache_piece_attrib = piece_parm;
 	    gdp->replaceWith(*base_gdp);
 
 		const GA_Storage& storage= half_float_parm ? GA_STORE_REAL16 : GA_STORE_REAL32;
