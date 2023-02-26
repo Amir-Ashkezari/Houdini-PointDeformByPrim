@@ -26,8 +26,8 @@ struct MapRay
 
 struct AttribsToInterpolate
 {
-	const GA_Attribute* BasePAttrib;
-	GA_Attribute* PAttrib;
+	const GA_Attribute *BasePAttrib;
+	GA_Attribute *PAttrib;
 	UT_Array<const GA_Attribute*> BasePtAttribs;
 	UT_Array<GA_Attribute*> PtAttribs;
 	UT_Array<const GA_Attribute*> BaseVtxAttribs;
@@ -36,17 +36,19 @@ struct AttribsToInterpolate
 
 struct HitAttributes
 {
-	GA_Attribute* Xform;
-	GA_Attribute* RestP;
-	GA_Attribute* Prim;
-	GA_Attribute* UV;
+	GA_Attribute *Xform;
+	GA_Attribute *RestP;
+	GA_Attribute *Prim;
+	GA_Attribute *UV;
 };
 
-struct DriveAttribs
+struct DriveAttribHandles
 {
-	bool Drive;
-	GA_Attribute* Normal;
-	GA_Attribute* Up;
+	bool Drive = false;
+	GA_ROHandleV3 RestNormal_H;
+	GA_ROHandleV3 RestUp_H;
+	GA_ROHandleV3 DeformedNormal_H;
+	GA_ROHandleV3 DeformedUp_H;
 };
 
 } // end AKA
