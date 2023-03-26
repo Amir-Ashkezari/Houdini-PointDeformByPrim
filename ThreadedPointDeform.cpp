@@ -61,8 +61,7 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect &ray_gdp, const 
 				trn_info.geoprim = min_info.prim;
 
 				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(
-						trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
 				else
 					buildXformByPrimIntrinsic(trn_info);
 				trn_info.rot.invert();
@@ -118,8 +117,7 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI piece_
 				trn_info.geoprim = min_info.prim;
 
 				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(
-						trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
 				else
 					buildXformByPrimIntrinsic(trn_info);
 				trn_info.rot.invert();
@@ -175,8 +173,7 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_
 				trn_info.geoprim = min_info.prim;
 
 				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(
-						trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
 				else
 					buildXformByPrimIntrinsic(trn_info);
 				trn_info.rot.invert();
@@ -213,8 +210,7 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, cons
 				trn_info.geoprim = myDeformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
 
 				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(
-						trn_info, myDeformedGdp, myDriveAttribHs.DeformedNormal_H, myDriveAttribHs.DeformedUp_H);
+					buildXformByAttribute(trn_info, myDeformedGdp, myDriveAttribHs.DeformedNormal_H, myDriveAttribHs.DeformedUp_H);
 				else
 					buildXformByPrimIntrinsic(trn_info);
 
@@ -258,8 +254,7 @@ ThreadedPointDeform::buildXformByAttribute(TransformInfo &trn_info,
 
 	UT_Array<exint> vtxoffsets;
 	UT_Array<fpreal32> weightlist;
-	trn_info.geoprim->computeInteriorPointWeights(
-		vtxoffsets, weightlist, trn_info.hituv.x(), trn_info.hituv.y(), 0.f);
+	trn_info.geoprim->computeInteriorPointWeights(vtxoffsets, weightlist, trn_info.hituv.x(), trn_info.hituv.y(), 0.f);
 
 	trn_info.primnml = 0.f;
 	trn_info.up = 0.f;

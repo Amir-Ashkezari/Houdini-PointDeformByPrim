@@ -148,14 +148,6 @@ static const char* theDsFile = R"THEDSFILE(
             default { "" }
 			help    "The name of a string or integer point attribute to use to treat the geometry as separate pieces. The attribute must be present on both the mesh and rest lattice. Points with the same value in this attribute are considered part of the same 'piece'. When you specify a valid piece attribute, this node deforms each piece using only the lattice points with the same piece value. \nThis lets you deform independent objects (pieces) in a single pass. You can create a piece attribute based on connectivity with the Connectivity SOP."
         }
-		parm {
-            name    "preseparatepieces"
-            cppname "PreSeparatePieces"
-            label   "Pre-Separate Pieces"
-            type    toggle
-            default { "1" }
-            help    "Virtually move pieces apart (to ensure they don't overlap) before capturing. This can greatly reduce the cost of capturing if many pieces are close together."
-        }
 	}
 )THEDSFILE"
 // ==== This is necessary because MSVC++ has a limit of 16380 character per
@@ -329,8 +321,7 @@ SOP_PointDeformByPrimVerb::currentParmsValue(const CookParms &cookparms) const
 		sopparms.getNormalAttrib() <<
 		sopparms.getUpAttrib() <<
 		sopparms.getRadius() <<
-		sopparms.getPieceAttrib() <<
-		sopparms.getPreSeparatePieces();
+		sopparms.getPieceAttrib();
 
 	return oss.str().buffer();
 }
@@ -484,7 +475,6 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	const UT_StringHolder &up_attrib_parm = sopparms.getUpAttrib();
 	const fpreal32 radius_parm = sopparms.getRadius();
 	const UT_StringHolder &piece_parm = sopparms.getPieceAttrib();
-	const bool pre_separate_parm = sopparms.getPreSeparatePieces();
     const bool rigid_proj_parm = sopparms.getRigidProjection();
     const bool update_nmls_parm = sopparms.getUpdateAffectedNmls();
     const UT_StringHolder &attribs_parm = sopparms.getAttribs();
