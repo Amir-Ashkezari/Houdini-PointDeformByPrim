@@ -77,68 +77,65 @@ static const char* theDsFile = R"THEDSFILE(
         parmtag { "script_action_icon" "BUTTONS_reselect" }
         help    "Which points of the model (the first input) to capture and deform using the lattice. Leave this blank to deform all points in the first input. Click the Reselect button to the right to interactively select the points in the viewer."
     }
-	parm {
-        name    "mode"
-        cppname "Mode"
-        label   "Mode"
-        type    ordinal
-        default { "0" }
-        menu {
-            "capturedeform"    "Capture and Deform"
-            "capture"          "Capture"
-		}
-        help    "Normal operation of this node is to both capture points and deform. However, you can use this parameter to have the node only perform capturing operation. There is no speed difference to using one node to do both, or two nodes to do the two steps separately. The only reason you might want to change this is if you have a technical workflow where you want to use the capture information in another node before doing the deformation for some reason. \nNote In order to avoid computing capture attributes on every cook, the node will keep capture attributes for consecutive cooks unless there is change in the upstream geometries."
-	}
-	parm {
-        name    "captureattribshalf"
-		cppname "CaptureAttribsHalf"
-        label   "Capture Attributes 16-bit"
-        type    toggle
-        default { "1" }
-        help    "In order to reduce memory footprint, by default capture attributes are stored as 16-bit(half-float) instead 32-bit(float)."
-    }
-	parm {
-        name    "drivebyattribs"
-		cppname "DriveByAttribs"
-        label   "Drive By Attribs"
-        type    toggle
-        default { "0" }
-        help    "Use normal/up vector from Rest/Deformed geomerty streams to drive the deformation."
-    }
-	parm {
-        name    "normalattrib"
-		cppname "NormalAttrib"
-        label   "Normal Attrib"
-        type    string
-        default { "N" }
-        help    "Normal vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
-
-		hidewhen    "{ drivebyattribs == 0 }"
-		disablewhen "{ drivebyattribs == 0 }"
-    }
-	parm {
-        name    "upattrib"
-		cppname "UpAttrib"
-        label   "Up Attrib"
-        type    string
-        default { "up" }
-        help    "Up vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
-
-		hidewhen    "{ drivebyattribs == 0 }"
-		disablewhen "{ drivebyattribs == 0 }"
-    }
 	groupsimple {
         name    "capture_folder"
         label   "Capture"
 
 		parm {
-            name    "radius"
-			cppname "Radius"
-            label   "Radius"
+			name    "drivebyattribs"
+			cppname "DriveByAttribs"
+			label   "Drive By Attribs"
+			type    toggle
+			default { "0" }
+			help    "Use normal/up vector from Rest/Deformed geomerty streams to drive the deformation."
+		}
+		parm {
+			name    "normalattrib"
+			cppname "NormalAttrib"
+			label   "Normal Attrib"
+			type    string
+			default { "N" }
+			help    "Normal vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
+
+			disablewhen "{ drivebyattribs == 0 }"
+		}
+		parm {
+			name    "upattrib"
+			cppname "UpAttrib"
+			label   "Up Attrib"
+			type    string
+			default { "up" }
+			help    "Up vector attribute from Rest/Deformed geomerty streams for constructing transformation matrix."
+
+			disablewhen "{ drivebyattribs == 0 }"
+		}
+		parm {
+			name    "sepparm1"
+			cppname "SepParm1"
+			type    separator
+
+			default { "" }
+		}
+		parm {
+			name    "multiplesamples"
+			cppname "MultipleSamples"
+			label   "Multiple Samples"
+			type    toggle
+			default { "0" }
+			help    "Shooting multiple samples to find an average position based on weighted distance."
+
+			disablewhen "{ drivebyattribs == 1 }"
+		}
+		parm {
+            name    "mindistthresh"
+			cppname "MinDistThresh"
+            label   "Minimum Distance Threshold"
             type    float
-            default { "0" }
-            range   { 0 5 }
-			help    "The maximum distance (in Houdini world units) away from each model point to look for nearby lattice points."
+            default { "0.001" }
+            range   { 0.00001 0.1 }
+			help    "The minimum distance (Houdini world units) away from a surface position to stop shooting multiple rays."
+
+			disablewhen "{ multiplesamples == 0 }"
         }
         parm {
             name    "pieceattrib"
@@ -157,22 +154,6 @@ R"THEDSFILE(
         name    "deform_folder"
         label   "Deform"
 
-		parm {
-            name    "rigidprojection"
-			cppname "RigidProjection"
-            label   "Rigid Projection"
-            type    toggle
-            default { "1" }
-            help    "The computed local transforms may include a shear. This removes any shear, leaving only a rigid transform. You can try turning this parameter off or on to see how it affects the look of the deformation."
-        }
-		parm {
-            name    "updateaffectednmls"
-			cppname "UpdateAffectedNmls"
-            label   "Recompute Affected Normals"
-            type    toggle
-            default { "1" }
-            help    "Recomputes any normals that are affected by polygons with both deformed and undeformed points. This only matters if you are deforming some points and not others. If you are deforming the whole geometry (or whole pieces), this has no effect, since the normals are transformed. \nIf P (point position) is not in the Attributes to Transform below, this has no effect."
-        }
         parm {
             name    "attribs"
             cppname "Attribs"
@@ -181,8 +162,14 @@ R"THEDSFILE(
             default { "*" }
             help    "A space-separated list of attribute names/patterns, specifying which attributes are transformed by the deformation. The default is *, meaning all attributes. The node modifies vector attributes according to their type info, as points, vectors, or normals."
         }
-	
-        hidewhen "{ mode == capture }"
+		//parm {
+		//	name    "captureattribshalf"
+		//	cppname "CaptureAttribsHalf"
+		//	label   "Capture Attributes 16-bit"
+		//	type    toggle
+		//	default { "1" }
+		//	help    "In order to reduce memory footprint, by default capture attributes are stored as 16-bit(half-float) instead 32-bit(float)."
+		//}
 	}
 }
 )THEDSFILE";
@@ -315,13 +302,13 @@ SOP_PointDeformByPrimVerb::currentParmsValue(const CookParms &cookparms) const
 	UT_OStringStream oss;
 	oss << 
 		sopparms.getGroup() <<
-		UTstatic_cast(int32, sopparms.getMode()) <<
-		sopparms.getCaptureAttribsHalf() <<
 		sopparms.getDriveByAttribs() <<
 		sopparms.getNormalAttrib() <<
 		sopparms.getUpAttrib() <<
-		sopparms.getRadius() <<
-		sopparms.getPieceAttrib();
+		sopparms.getMultipleSamples() <<
+		sopparms.getMinDistThresh() <<
+		sopparms.getPieceAttrib() <<
+		sopparms.getAttribs();
 
 	return oss.str().buffer();
 }
@@ -468,16 +455,15 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
     // get parms
 	const UT_StringHolder &group_parm = sopparms.getGroup();
-	const int32 mode_parm = UTstatic_cast(int32, sopparms.getMode());
-	const bool half_float_parm = sopparms.getCaptureAttribsHalf();
+	//const int32 mode_parm = UTstatic_cast(int32, sopparms.getMode());
 	const bool drive_by_attribs = sopparms.getDriveByAttribs();
 	const UT_StringHolder &normal_attrib_parm = sopparms.getNormalAttrib();
 	const UT_StringHolder &up_attrib_parm = sopparms.getUpAttrib();
-	const fpreal32 radius_parm = sopparms.getRadius();
+	const bool multi_samples = sopparms.getMultipleSamples();
+	const fpreal32 min_dist_thresh = sopparms.getMinDistThresh();
 	const UT_StringHolder &piece_parm = sopparms.getPieceAttrib();
-    const bool rigid_proj_parm = sopparms.getRigidProjection();
-    const bool update_nmls_parm = sopparms.getUpdateAffectedNmls();
     const UT_StringHolder &attribs_parm = sopparms.getAttribs();
+	//const bool half_float_parm = sopparms.getCaptureAttribsHalf();
 	
 	// evaluation for reinitialization
 	const UT_StringHolder &parms_value_name("__parms_value");
@@ -510,12 +496,14 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	else
 		reinitialize = true;
 
-	// create/get deformation attribs
-	const UT_StringHolder &rest_xform_name("__rest_xform");
+	// create/get deformation attribsCaptureAttributes
 	const UT_StringHolder &rest_p_name("__rest_p");
-	const UT_StringHolder &hit_prim_name("__hit_prim");
-	const UT_StringHolder &hit_uv_name("__hit_uv");
-	HitAttributes hit_attribs;
+	const UT_StringHolder &capture_prims_name("__capture_prims");
+	const UT_StringHolder &capture_uvws_name("__capture_uvws");
+	const UT_StringHolder &capture_weights_name("__capture_weights");
+	CaptureAttributes capture_attribs;
+	capture_attribs.MultipleSamples = multi_samples;
+	capture_attribs.MinDistThresh= min_dist_thresh;
 
     if (reinitialize)
     {
@@ -531,31 +519,30 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 		base_meta_count_h.set(0, base_gdp->getMetaCacheCount());
 		rest_meta_count_h.set(0, rest_gdp->getMetaCacheCount());
 
-		const GA_Storage &storage= half_float_parm ? GA_STORE_REAL16 : GA_STORE_REAL32;
-		hit_attribs.Xform = gdp->addFloatTuple(GA_ATTRIB_POINT, rest_xform_name, 9, (GA_Defaults)0.f, nullptr, nullptr, storage);
-		hit_attribs.Xform->setTypeInfo(GA_TYPE_TRANSFORM);
-		hit_attribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, rest_p_name, 3, (GA_Defaults)0.f, nullptr, nullptr, storage);
-		hit_attribs.RestP->setTypeInfo(GA_TYPE_POINT);
-		hit_attribs.Prim = gdp->addIntTuple(GA_ATTRIB_POINT, hit_prim_name, 1);
-		hit_attribs.Prim->setTypeInfo(GA_TYPE_NONARITHMETIC_INTEGER);
-		hit_attribs.UV = gdp->addFloatTuple(GA_ATTRIB_POINT, hit_uv_name, 2, (GA_Defaults)0.f, nullptr, nullptr, storage);
-		hit_attribs.UV->setTypeInfo(GA_TYPE_VECTOR);
+		//const GA_Storage &storage= half_float_parm ? GA_STORE_REAL16 : GA_STORE_REAL32;
+		capture_attribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, rest_p_name, 3, (GA_Defaults)0.f, nullptr, nullptr, GA_STORE_REAL32);
+		capture_attribs.RestP->setTypeInfo(GA_TYPE_POINT);
+		capture_attribs.Prims = gdp->addIntArray(GA_ATTRIB_POINT, capture_prims_name, 1);
+		capture_attribs.Prims->setTypeInfo(GA_TYPE_NONARITHMETIC_INTEGER);
+		capture_attribs.UVWs = gdp->addFloatArray(GA_ATTRIB_POINT, capture_uvws_name, 2, nullptr, nullptr, GA_STORE_REAL16);
+		capture_attribs.UVWs->setTypeInfo(GA_TYPE_VECTOR);
+		capture_attribs.Weights = gdp->addFloatArray(GA_ATTRIB_POINT, capture_weights_name, 1, nullptr, nullptr, GA_STORE_REAL16);
     }
     else
     {
-		hit_attribs.Xform = gdp->findAttribute(GA_ATTRIB_POINT, rest_xform_name);
-		hit_attribs.RestP = gdp->findAttribute(GA_ATTRIB_POINT, rest_p_name);
-		hit_attribs.Prim = gdp->findAttribute(GA_ATTRIB_POINT, hit_prim_name);
-		hit_attribs.UV = gdp->findAttribute(GA_ATTRIB_POINT, hit_uv_name);
+		capture_attribs.RestP = gdp->findAttribute(GA_ATTRIB_POINT, rest_p_name);
+		capture_attribs.Prims = gdp->findAttribute(GA_ATTRIB_POINT, capture_prims_name);
+		capture_attribs.UVWs = gdp->findAttribute(GA_ATTRIB_POINT, capture_uvws_name);
+		capture_attribs.Weights = gdp->findAttribute(GA_ATTRIB_POINT, capture_weights_name);
     }
 
 	parms_value_attrib->bumpDataId();
 	base_meta_count_attrib->bumpDataId();
 	rest_meta_count_attrib->bumpDataId();
-	hit_attribs.Xform->bumpDataId();
-	hit_attribs.RestP->bumpDataId();
-	hit_attribs.Prim->bumpDataId();
-	hit_attribs.UV->bumpDataId();
+	capture_attribs.RestP->bumpDataId();
+	capture_attribs.Prims->bumpDataId();
+	capture_attribs.UVWs->bumpDataId();
+	capture_attribs.Weights->bumpDataId();
 
 	// create an array of attribs to interpolate point/vertex based on attribParm
 	// attribs_to_interpolate is part of Utils.h
@@ -569,7 +556,7 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	if (attribs_parm == "*")
 	{
 		UT_Array<GA_TypeInfo> allowable_type{ GA_TYPE_POINT, GA_TYPE_VECTOR, GA_TYPE_NORMAL };
-		UT_Array<UT_StringHolder> excluding_names{ "P", rest_p_name, rest_xform_name, hit_uv_name};
+		UT_Array<UT_StringHolder> excluding_names{ "P", rest_p_name };
 
 		const GA_AttributeDict &base_point_attribs = base_attribs.getDict(GA_ATTRIB_POINT);
 		for (GA_AttributeDict::iterator pit(base_point_attribs.begin()); pit != base_point_attribs.end(); ++pit)
@@ -647,7 +634,8 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
 	GA_SplittableRange ptrange(std::move(gdp->getPointRange(point_group)));
     ThreadedPointDeform thread_ptdeform(
-		gdp, base_gdp, rest_gdp, deformed_gdp, std::move(ptrange), std::move(drive_attrib_hs), hit_attribs, attribs_to_interpolate);
+		gdp, base_gdp, rest_gdp, deformed_gdp, std::forward<GA_SplittableRange>(ptrange),
+		std::forward<DriveAttribHandles>(drive_attrib_hs), capture_attribs, attribs_to_interpolate);
 	
     if (reinitialize)
     {
@@ -681,25 +669,22 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
             thread_ptdeform.captureClosestPoint(ray_rest);
         }
 	
-		hit_attribs.Xform->bumpDataId();
-		hit_attribs.RestP->bumpDataId();
-		hit_attribs.Prim->bumpDataId();
-		hit_attribs.UV->bumpDataId();
+		capture_attribs.RestP->bumpDataId();
+		capture_attribs.Prims->bumpDataId();
+		capture_attribs.UVWs->bumpDataId();
+		capture_attribs.Weights->bumpDataId();
 	
 		for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
 			pt_attrib->bumpDataId();
 		for (GA_Attribute *vtx_attrib : attribs_to_interpolate.VtxAttribs)
 			vtx_attrib->bumpDataId();
     }
-
-	if (mode_parm)
-		return;
-	
-	thread_ptdeform.computeDeformation(rigid_proj_parm);
-	attribs_to_interpolate.PAttrib->bumpDataId();
-	
-	for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
-		pt_attrib->bumpDataId();
-	for (GA_Attribute *vtx_attrib : attribs_to_interpolate.VtxAttribs)
-		vtx_attrib->bumpDataId();
+		
+	//thread_ptdeform.computeDeformation();
+	//attribs_to_interpolate.PAttrib->bumpDataId();
+	//
+	//for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
+	//	pt_attrib->bumpDataId();
+	//for (GA_Attribute *vtx_attrib : attribs_to_interpolate.VtxAttribs)
+	//	vtx_attrib->bumpDataId();
 }

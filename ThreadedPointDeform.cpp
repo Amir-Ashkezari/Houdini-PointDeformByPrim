@@ -13,20 +13,22 @@ ThreadedPointDeform::ThreadedPointDeform(GU_Detail *gdp,
 										 const GU_Detail *deformed_gdp,
 										 GA_SplittableRange &&ptrange,
 										 DriveAttribHandles &&drive_attrib_hs,
-										 HitAttributes &hit_attribs,
+										 CaptureAttributes &capture_attribs,
 										 AttribsToInterpolate &attribs_to_interpolate)
 	: myGdp(gdp)
 	, myBaseGdp(base_gdp)
 	, myRestGdp(rest_gdp)
 	, myDeformedGdp(deformed_gdp)
-	, myPtRange(std::move(ptrange))
-	, myDriveAttribHs(std::move(drive_attrib_hs))
+	, myPtRange(std::forward<GA_SplittableRange>(ptrange))
+	, myDriveAttribHs(std::forward<DriveAttribHandles>(drive_attrib_hs))
 	, myBasePh(attribs_to_interpolate.BasePAttrib)
 	, myPh(attribs_to_interpolate.PAttrib)
-	, myRestXformh(hit_attribs.Xform)
-	, myRestPh(hit_attribs.RestP)
-	, myHitPrimh(hit_attribs.Prim)
-	, myHitUVh(hit_attribs.UV)
+	, myCaptureMultiSamples(capture_attribs.MultipleSamples)
+	, myCaptureMinDistThresh(capture_attribs.MinDistThresh)
+	, myRestPh(capture_attribs.RestP)
+	, myCapturePrimsh(capture_attribs.Prims)
+	, myCaptureUVWsh(capture_attribs.UVWs)
+	, myCaptureWeightsh(capture_attribs.Weights)
 {
 	for (const GA_Attribute *basePtAttrib : attribs_to_interpolate.BasePtAttribs)
 		myBasePtAttribsh.emplace_back(basePtAttrib);
@@ -56,23 +58,35 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect &ray_gdp, const 
 			{
 				ray_gdp.minimumPoint(myBasePh.get(ptoff), min_info);
 
-				trn_info.pos = myBasePh.get(ptoff);
-				trn_info.hituv = { min_info.u1, min_info.v1 };
-				trn_info.geoprim = min_info.prim;
+				trn_info.Pos = myBasePh.get(ptoff);
+				trn_info.CapturePrims.emplace_back(min_info.prim->getMapIndex());
+				trn_info.CaptureUVWs.emplace_back(min_info.u1);
+				trn_info.CaptureUVWs.emplace_back(min_info.v1);
+				trn_info.CaptureWeights.emplace_back(1.f);
+				trn_info.GeomPrim = min_info.prim;
 
-				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
-				else
-					buildXformByPrimIntrinsic(trn_info);
-				trn_info.rot.invert();
+				min_info.prim->evaluateInteriorPoint(trn_info.PrimPosition, min_info.u1, min_info.v1);
+				UT_Vector3F min_dir = trn_info.PrimPosition - trn_info.Pos;
+				fpreal32 min_dist = min_dir.length();
+				min_dir = min_dir.normalize();
 
-				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				trn_info.pos.rowVecMult(trn_info.rot);
+				if (min_dist > myCaptureMinDistThresh && myCaptureMultiSamples && !myDriveAttribHs.Drive)
+				{
 
-				myRestXformh.set(ptoff, trn_info.rot);
-				myRestPh.set(ptoff, trn_info.pos);
-				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
-				myHitUVh.set(ptoff, trn_info.hituv);
+				}
+
+				//	buildXformByPrimIntrinsic(trn_info);
+				//else
+				//	buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+				//trn_info.Rot.invert();
+
+				//trn_info.Pos -= UTverify_cast<UT_Vector3F>(trn_info.PrimPosition);
+				//trn_info.Pos.rowVecMult(trn_info.Rot);
+
+				myRestPh.set(ptoff, trn_info.Pos);
+				myCapturePrimsh.set(ptoff, trn_info.CapturePrims);
+				myCaptureUVWsh.set(ptoff, trn_info.CaptureUVWs);
+				myCaptureWeightsh.set(ptoff, trn_info.CaptureWeights);
 			}
 		}
 	}
@@ -112,23 +126,23 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleI piece_
 
 				rest_prim_rays.Map.at(piece_attrib_val)->minimumPoint(myPh.get(ptoff), min_info);
 
-				trn_info.pos = myBasePh.get(ptoff);
-				trn_info.hituv = { min_info.u1, min_info.v1 };
-				trn_info.geoprim = min_info.prim;
+				//trn_info.Pos = myBasePh.get(ptoff);
+				//trn_info.CaptureUVWs = { min_info.u1, min_info.v1 };
+				//trn_info.GeomPrim = min_info.prim;
 
-				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
-				else
-					buildXformByPrimIntrinsic(trn_info);
-				trn_info.rot.invert();
+				//if (myDriveAttribHs.Drive)
+				//	buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+				//else
+				//	buildXformByPrimIntrinsic(trn_info);
+				//trn_info.Rot.invert();
+				//
+				//trn_info.Pos -= UTverify_cast<UT_Vector3F>(trn_info.PrimPosition);
+				//trn_info.Pos.rowVecMult(trn_info.Rot);
 				
-				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				trn_info.pos.rowVecMult(trn_info.rot);
-				
-				myRestXformh.set(ptoff, trn_info.rot);
-				myRestPh.set(ptoff, trn_info.pos);
-				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
-				myHitUVh.set(ptoff, trn_info.hituv);
+				myRestPh.set(ptoff, trn_info.Pos);
+				myCapturePrimsh.set(ptoff, std::forward<UT_Int32Array>(trn_info.CapturePrims));
+				myCaptureUVWsh.set(ptoff, trn_info.CaptureUVWs);
+				myCaptureWeightsh.set(ptoff, trn_info.CaptureWeights);
 			}
 		}
 	}
@@ -168,30 +182,30 @@ ThreadedPointDeform::captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_
 
 				rest_prim_rays.Map.at(piece_attrib_val)->minimumPoint(myPh.get(ptoff), min_info);
 
-				trn_info.pos = myBasePh.get(ptoff);
-				trn_info.hituv = { min_info.u1, min_info.v1 };
-				trn_info.geoprim = min_info.prim;
+				//trn_info.Pos = myBasePh.get(ptoff);
+				//trn_info.CaptureUVWs = { min_info.u1, min_info.v1 };
+				//trn_info.GeomPrim = min_info.prim;
 
-				if (myDriveAttribHs.Drive)
-					buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
-				else
-					buildXformByPrimIntrinsic(trn_info);
-				trn_info.rot.invert();
+				//if (myDriveAttribHs.Drive)
+				//	buildXformByAttribute(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+				//else
+				//	buildXformByPrimIntrinsic(trn_info);
+				//trn_info.Rot.invert();
+				//
+				//trn_info.Pos -= UTverify_cast<UT_Vector3F>(trn_info.PrimPosition);
+				//trn_info.Pos.rowVecMult(trn_info.Rot);
 				
-				trn_info.pos -= UTverify_cast<UT_Vector3F>(trn_info.primpos);
-				trn_info.pos.rowVecMult(trn_info.rot);
-				
-				myRestXformh.set(ptoff, trn_info.rot);
-				myRestPh.set(ptoff, trn_info.pos);
-				myHitPrimh.set(ptoff, min_info.prim->getMapIndex());
-				myHitUVh.set(ptoff, trn_info.hituv);
+				myRestPh.set(ptoff, trn_info.Pos);
+				myCapturePrimsh.set(ptoff, std::forward<UT_Int32Array>(trn_info.CapturePrims));
+				myCaptureUVWsh.set(ptoff, trn_info.CaptureUVWs);
+				myCaptureWeightsh.set(ptoff, trn_info.CaptureWeights);
 			}
 		}
 	}
 }
 
 void
-ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, const UT_JobInfo &info)
+ThreadedPointDeform::computeDeformationPartial(const UT_JobInfo &info)
 {
 	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
 	{
@@ -202,12 +216,12 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, cons
 			
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
-				trn_info.pos = myRestPh.get(ptoff);
-				trn_info.hitprim = myHitPrimh.get(ptoff);
-				trn_info.hituv = myHitUVh.get(ptoff);
+				/*trn_info.Pos = myRestPh.get(ptoff);
+				trn_info.CapturePrims = myCapturePrimsh.get(ptoff);
+				trn_info.CaptureUVWs = myCaptureUVWsh.get(ptoff);
 
 				const GA_IndexMap &prim_map = myDeformedGdp->getIndexMap(GA_ATTRIB_PRIMITIVE);
-				trn_info.geoprim = myDeformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.hitprim));
+				trn_info.GeomPrim = myDeformedGdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.CapturePrims));
 
 				if (myDriveAttribHs.Drive)
 					buildXformByAttribute(trn_info, myDeformedGdp, myDriveAttribHs.DeformedNormal_H, myDriveAttribHs.DeformedUp_H);
@@ -218,52 +232,53 @@ ThreadedPointDeform::computeDeformationPartial(const bool rigid_projection, cons
 				for (size_t idx = 0; idx < myBasePtAttribsh.size(); ++idx)
 				{
 					vecAttrib = myBasePtAttribsh[idx].get(ptoff);
-					vecAttrib.rowVecMult(myRestXformh.get(ptoff));
-					vecAttrib.rowVecMult(trn_info.rot);
+					vecAttrib.rowVecMult(myCaptureWeightsh.get(ptoff));
+					vecAttrib.rowVecMult(trn_info.Rot);
 
 					myPtAttribsh[idx].set(ptoff, vecAttrib);
 				}
 				
-				trn_info.pos.rowVecMult(trn_info.rot);
-				trn_info.pos += UTverify_cast<UT_Vector3F>(trn_info.primpos);
+				trn_info.Pos.rowVecMult(trn_info.Rot);
+				trn_info.Pos += UTverify_cast<UT_Vector3F>(trn_info.PrimPosition);*/
 				
-				myPh.set(ptoff, trn_info.pos);
+				myPh.set(ptoff, trn_info.Pos);
 			}
 		}
 	}
 }
 
 void
-ThreadedPointDeform::buildXformByPrimIntrinsic(TransformInfo &trn_info)
+ThreadedPointDeform::buildXformByPrimIntrinsic(TransformInfo &trn_info, int32 idx)
 {
-	trn_info.geoprim->evaluateNormalVector(trn_info.primnml, trn_info.hituv.x(), trn_info.hituv.y());
-	trn_info.geoprim->evaluateInteriorPoint(trn_info.primpos, trn_info.hituv.x(), trn_info.hituv.y());
+	trn_info.GeomPrim->evaluateNormalVector(trn_info.PrimNormal, trn_info.CaptureUVWs[idx], trn_info.CaptureUVWs[idx]);
+	trn_info.GeomPrim->evaluateInteriorPoint(trn_info.PrimPosition, trn_info.CaptureUVWs[idx], trn_info.CaptureUVWs[idx]);
 
-	trn_info.up = trn_info.primnml;
-	trn_info.up.cross({ 0.f, 1.f, 0.f });
-	trn_info.rot.lookat({ 0.f, 0.f, 0.f }, trn_info.primnml, trn_info.up);
+	trn_info.Up = trn_info.PrimNormal;
+	trn_info.Up.cross({ 0.f, 1.f, 0.f });
+	trn_info.Rot.lookat({ 0.f, 0.f, 0.f }, trn_info.PrimNormal, trn_info.Up);
 }
 
 void
 ThreadedPointDeform::buildXformByAttribute(TransformInfo &trn_info,
 										   const GU_Detail *gdp,
 										   const GA_ROHandleV3 &normal_attrib_h,
-										   const GA_ROHandleV3 &up_attrib_h)
+										   const GA_ROHandleV3 &up_attrib_h,
+										   int32 idx)
 {
-	trn_info.geoprim->evaluateInteriorPoint(trn_info.primpos, trn_info.hituv.x(), trn_info.hituv.y());
+	trn_info.GeomPrim->evaluateInteriorPoint(trn_info.PrimPosition, trn_info.CaptureUVWs[idx], trn_info.CaptureUVWs[idx]);
 
 	UT_Array<exint> vtxoffsets;
 	UT_Array<fpreal32> weightlist;
-	trn_info.geoprim->computeInteriorPointWeights(vtxoffsets, weightlist, trn_info.hituv.x(), trn_info.hituv.y(), 0.f);
+	trn_info.GeomPrim->computeInteriorPointWeights(vtxoffsets, weightlist, trn_info.CaptureUVWs[idx], trn_info.CaptureUVWs[idx], 0.f);
 
-	trn_info.primnml = 0.f;
-	trn_info.up = 0.f;
+	trn_info.PrimNormal = 0.f;
+	trn_info.Up = 0.f;
 	for (exint i = 0; i < vtxoffsets.size(); ++i)
 	{
-		trn_info.primnml += normal_attrib_h.get(gdp->vertexPoint(vtxoffsets[i])) * weightlist[i];
-		trn_info.up += up_attrib_h.get(gdp->vertexPoint(vtxoffsets[i])) * weightlist[i];
+		trn_info.PrimNormal += normal_attrib_h.get(gdp->vertexPoint(vtxoffsets[i])) * weightlist[i];
+		trn_info.Up += up_attrib_h.get(gdp->vertexPoint(vtxoffsets[i])) * weightlist[i];
 	}
 
-	trn_info.rot.lookat({ 0.f, 0.f, 0.f }, trn_info.primnml, trn_info.up);
+	trn_info.Rot.lookat({ 0.f, 0.f, 0.f }, trn_info.PrimNormal, trn_info.Up);
 }
 

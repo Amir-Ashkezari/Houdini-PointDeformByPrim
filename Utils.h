@@ -34,12 +34,14 @@ struct AttribsToInterpolate
 	UT_Array<GA_Attribute*> VtxAttribs;
 };
 
-struct HitAttributes
+struct CaptureAttributes
 {
-	GA_Attribute *Xform;
+	bool MultipleSamples = false;
+	fpreal32 MinDistThresh = 0.001f;
 	GA_Attribute *RestP;
-	GA_Attribute *Prim;
-	GA_Attribute *UV;
+	GA_Attribute *Prims;
+	GA_Attribute *UVWs;
+	GA_Attribute *Weights;
 };
 
 struct DriveAttribHandles

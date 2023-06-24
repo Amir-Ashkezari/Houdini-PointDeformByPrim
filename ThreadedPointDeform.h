@@ -24,29 +24,28 @@ public:
 						const GU_Detail *deformedGdp,
 						GA_SplittableRange &&ptrange,
 						DriveAttribHandles &&drive_attrib_hs,
-						HitAttributes &hit_attribs, 
+						CaptureAttributes &capture_attribs, 
 						AttribsToInterpolate &attribs_to_interpolate);
 
 	struct TransformInfo
 	{
 		TransformInfo()
-			: hitprim(0)
-			, hituv(0.f)
-			, pos(0.f)
-			, up(0.f)
-			, primnml(0.f)
-			, primpos(0.f, 0.f, 0.f)
-			, rot(1.f)
+			: Pos(0.f)
+			, Up(0.f)
+			, PrimNormal(0.f)
+			, PrimPosition(0.f, 0.f, 0.f)
+			, Rot(1.f)
 		{}
 
-		GA_Index hitprim;
-		UT_Vector2F hituv;
-		UT_Vector3F pos;
-		UT_Vector3F up;
-		UT_Vector3F primnml;
-		UT_Vector4F primpos;
-		UT_Matrix3F rot;
-		const GEO_Primitive *geoprim;
+		UT_ValArray<int32> CapturePrims;
+		UT_ValArray<fpreal16> CaptureUVWs;
+		UT_ValArray<fpreal16> CaptureWeights;
+		UT_Vector3F Pos;
+		UT_Vector3F Up;
+		UT_Vector3F PrimNormal;
+		UT_Vector4F PrimPosition;
+		UT_Matrix3F Rot;
+		const GEO_Primitive *GeomPrim;
 	};
 
 	THREADED_METHOD1(ThreadedPointDeform, myPtRange.canMultiThread(), captureClosestPoint, GU_RayIntersect&, ray_gdp);
@@ -58,15 +57,16 @@ public:
 	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureClosestPointByPieceAttrib, GA_ROHandleS, piece_attrib_h, MapRay<UT_StringHolder>, rest_prim_rays);
 	void captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_attrib_h, MapRay<UT_StringHolder> rest_prim_rays, const UT_JobInfo &info);
 
-	THREADED_METHOD1(ThreadedPointDeform, myPtRange.canMultiThread(), computeDeformation, const bool, rigid_projection);
-	void computeDeformationPartial(const bool rigid_projection, const UT_JobInfo &info);
+	THREADED_METHOD(ThreadedPointDeform, myPtRange.canMultiThread(), computeDeformation);
+	void computeDeformationPartial(const UT_JobInfo &info);
 
 protected:
-	void buildXformByPrimIntrinsic(TransformInfo &trn_info);
+	void buildXformByPrimIntrinsic(TransformInfo &trn_info, int32 idx);
 	void buildXformByAttribute(TransformInfo &trn_info,
 							   const GU_Detail *gdp,
 							   const GA_ROHandleV3 &normal_attrib_h,
-							   const GA_ROHandleV3 &up_attrib_h);
+							   const GA_ROHandleV3 &up_attrib_h,
+							   int32 idx);
 
 private:
 	GU_Detail *myGdp = nullptr;
@@ -77,10 +77,12 @@ private:
 	DriveAttribHandles &&myDriveAttribHs;
 	GA_ROHandleV3 myBasePh;
 	GA_RWHandleV3 myPh;
-	GA_RWHandleM3 myRestXformh;
-	GA_RWHandleT<UT_Vector3H> myRestPh;
-	GA_RWHandleI myHitPrimh;
-	GA_RWHandleT<UT_Vector2H> myHitUVh;
+	GA_RWHandleV3 myRestPh;
+	const bool myCaptureMultiSamples;
+	const fpreal32 myCaptureMinDistThresh;
+	GA_RWHandleT<UT_ValArray<int32>> myCapturePrimsh;
+	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureUVWsh;
+	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureWeightsh;
 	UT_Array<GA_ROHandleV3> myBasePtAttribsh;
 	UT_Array<GA_RWHandleV3> myPtAttribsh;
 	UT_Array<GA_ROHandleV3> myBaseVtxAttribsh;
