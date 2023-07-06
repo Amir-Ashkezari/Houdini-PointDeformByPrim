@@ -26,7 +26,7 @@
 
 using namespace AKA;
 
-const UT_StringHolder SOP_PointDeformByPrim::theSOPTypeName("pointdeformbyprim"_sh);
+const UT_StringHolder SOP_PointDeformByPrim::theSOPTypeName("hdk_pointdeformbyprim"_sh);
 
 void
 newSopOperator(OP_OperatorTable *table)
@@ -41,6 +41,7 @@ newSopOperator(OP_OperatorTable *table)
 		nullptr,
 		0);
 
+	op->setOpTabSubMenuPath("Custom");
 	op->setIconName("SOP_pointdeform");
     op->setIsThreadSafe(true);
 
@@ -162,14 +163,6 @@ R"THEDSFILE(
             default { "*" }
             help    "A space-separated list of attribute names/patterns, specifying which attributes are transformed by the deformation. The default is *, meaning all attributes. The node modifies vector attributes according to their type info, as points, vectors, or normals."
         }
-		//parm {
-		//	name    "captureattribshalf"
-		//	cppname "CaptureAttribsHalf"
-		//	label   "Capture Attributes 16-bit"
-		//	type    toggle
-		//	default { "1" }
-		//	help    "In order to reduce memory footprint, by default capture attributes are stored as 16-bit(half-float) instead 32-bit(float)."
-		//}
 	}
 }
 )THEDSFILE";
@@ -463,7 +456,6 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	const fpreal32 min_dist_thresh = sopparms.getMinDistThresh();
 	const UT_StringHolder &piece_parm = sopparms.getPieceAttrib();
     const UT_StringHolder &attribs_parm = sopparms.getAttribs();
-	//const bool half_float_parm = sopparms.getCaptureAttribsHalf();
 	
 	// evaluation for reinitialization
 	const UT_StringHolder &parms_value_name("__parms_value");
@@ -519,7 +511,6 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 		base_meta_count_h.set(0, base_gdp->getMetaCacheCount());
 		rest_meta_count_h.set(0, rest_gdp->getMetaCacheCount());
 
-		//const GA_Storage &storage= half_float_parm ? GA_STORE_REAL16 : GA_STORE_REAL32;
 		capture_attribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, rest_p_name, 3, (GA_Defaults)0.f, nullptr, nullptr, GA_STORE_REAL32);
 		capture_attribs.RestP->setTypeInfo(GA_TYPE_POINT);
 		capture_attribs.Prims = gdp->addIntArray(GA_ATTRIB_POINT, capture_prims_name, 1);

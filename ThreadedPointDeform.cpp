@@ -51,28 +51,59 @@ ThreadedPointDeform::captureClosestPointPartial(GU_RayIntersect &ray_gdp, const 
 		GA_Offset start, end;
 		for (GA_Iterator it(pit.begin()); it.blockAdvance(start, end);)
 		{
-			TransformInfo trn_info;
-			GU_MinInfo min_info;
-
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
+				GU_MinInfo min_info;
 				ray_gdp.minimumPoint(myBasePh.get(ptoff), min_info);
 
+				TransformInfo trn_info;
 				trn_info.Pos = myBasePh.get(ptoff);
 				trn_info.CapturePrims.emplace_back(min_info.prim->getMapIndex());
 				trn_info.CaptureUVWs.emplace_back(min_info.u1);
 				trn_info.CaptureUVWs.emplace_back(min_info.v1);
 				trn_info.CaptureWeights.emplace_back(1.f);
 				trn_info.GeomPrim = min_info.prim;
-
+				
 				min_info.prim->evaluateInteriorPoint(trn_info.PrimPosition, min_info.u1, min_info.v1);
-				UT_Vector3F min_dir = trn_info.PrimPosition - trn_info.Pos;
-				fpreal32 min_dist = min_dir.length();
-				min_dir = min_dir.normalize();
+				UT_Vector3H min_dir = trn_info.PrimPosition - trn_info.Pos;
+				fpreal16 min_dist = min_dir.length();
+				min_dir.normalize();
 
 				if (min_dist > myCaptureMinDistThresh && myCaptureMultiSamples && !myDriveAttribHs.Drive)
 				{
+					UT_Vector3H x, y;
+					fpreal16 max_ray_dist, max_dist;
+					
+					y = std::forward<UT_Vector3H>({ 0.f, 1.f, 0.f });
+					if (min_dir.dot(std::forward<UT_Vector3H>({ 0.f, 1.f, 0.f })) > 0.99f)
+						y = std::forward<UT_Vector3H>({ 1.f, 0.f, 0.f });
+					y = cross(y, min_dir);
+					x = cross(y, min_dir);
+					UT_Array<UT_Vector3H> dirs{ -min_dir, y, -y, x, -x };
 
+					//max_ray_dist = min_dist * 1e+15f;
+					max_dist = 1.f;
+					for (UT_Vector3H &dir : dirs)
+					{
+						GU_RayInfo ray_info;
+						int32 hit = ray_gdp.sendRay(myBasePh.get(ptoff), dir, ray_info);
+						if (hit < 1)
+							continue;
+						
+						ray_info.myPrim->evaluateInteriorPoint(trn_info.PrimPosition, ray_info.myU, ray_info.myV);
+						fpreal16 hit_dist = (trn_info.PrimPosition - trn_info.Pos).length();
+						fpreal16 dist_ratio = min_dist / hit_dist;
+						max_dist += dist_ratio;
+
+						trn_info.CapturePrims.emplace_back(ray_info.myPrim->getMapIndex());
+						trn_info.CaptureUVWs.emplace_back(ray_info.myU);
+						trn_info.CaptureUVWs.emplace_back(ray_info.myV);
+						trn_info.CaptureWeights.emplace_back(dist_ratio);
+					}
+
+					fpreal16 delta = 1.f / max_dist;
+					for (int i = 0; i < trn_info.CaptureWeights.size(); ++i)
+						trn_info.CaptureWeights[i] *= delta;
 				}
 
 				//	buildXformByPrimIntrinsic(trn_info);
