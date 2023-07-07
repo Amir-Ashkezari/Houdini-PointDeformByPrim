@@ -538,7 +538,7 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	// create an array of attribs to interpolate point/vertex based on attribParm
 	// attribs_to_interpolate is part of Utils.h
 	AttribsToInterpolate attribs_to_interpolate;
-	attribs_to_interpolate.BasePAttrib = base_gdp->getP();
+	attribs_to_interpolate.OldPAttrib = base_gdp->getP();
 	attribs_to_interpolate.PAttrib = gdp->getP();
 
 	const GA_AttributeSet& base_attribs = base_gdp->getAttributes();
@@ -567,24 +567,6 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 			if (cur_attrib && excluding_names.find(cur_attrib->getFullName()) == -1)
 				if (allowable_type.find(cur_attrib->getTypeInfo()) != -1)
 					attribs_to_interpolate.PtAttribs.emplace_back(cur_attrib);
-		}
-
-		const GA_AttributeDict &base_vtx_attribs = base_attribs.getDict(GA_ATTRIB_VERTEX);
-		for (GA_AttributeDict::iterator vit(base_vtx_attribs.begin()); vit != base_vtx_attribs.end(); ++vit)
-		{
-			const GA_Attribute *cur_attrib = vit.attrib();
-
-			if (cur_attrib && allowable_type.find(cur_attrib->getTypeInfo()) != -1)
-				attribs_to_interpolate.BaseVtxAttribs.emplace_back(cur_attrib);
-		}
-	
-		const GA_AttributeDict &vertex_attribs = attribs.getDict(GA_ATTRIB_VERTEX);
-		for (GA_AttributeDict::iterator vit(vertex_attribs.begin()); vit != vertex_attribs.end(); ++vit)
-		{
-			GA_Attribute *cur_attrib = vit.attrib();
-	
-			if (cur_attrib && allowable_type.find(cur_attrib->getTypeInfo()) != -1)
-				attribs_to_interpolate.VtxAttribs.emplace_back(cur_attrib);
 		}
 	}
 	else
@@ -667,15 +649,11 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	
 		for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
 			pt_attrib->bumpDataId();
-		for (GA_Attribute *vtx_attrib : attribs_to_interpolate.VtxAttribs)
-			vtx_attrib->bumpDataId();
     }
 		
-	//thread_ptdeform.computeDeformation();
-	//attribs_to_interpolate.PAttrib->bumpDataId();
-	//
-	//for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
-	//	pt_attrib->bumpDataId();
-	//for (GA_Attribute *vtx_attrib : attribs_to_interpolate.VtxAttribs)
-	//	vtx_attrib->bumpDataId();
+	thread_ptdeform.computeDeformation();
+	attribs_to_interpolate.PAttrib->bumpDataId();
+
+	for (GA_Attribute *pt_attrib : attribs_to_interpolate.PtAttribs)
+		pt_attrib->bumpDataId();
 }

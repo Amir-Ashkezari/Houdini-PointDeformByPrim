@@ -26,12 +26,10 @@ struct MapRay
 
 struct AttribsToInterpolate
 {
-	const GA_Attribute *BasePAttrib;
+	const GA_Attribute *OldPAttrib;
 	GA_Attribute *PAttrib;
 	UT_Array<const GA_Attribute*> BasePtAttribs;
 	UT_Array<GA_Attribute*> PtAttribs;
-	UT_Array<const GA_Attribute*> BaseVtxAttribs;
-	UT_Array<GA_Attribute*> VtxAttribs;
 };
 
 struct CaptureAttributes
