@@ -24,22 +24,16 @@ struct MapRay
 	UT_Map<T, GU_RayIntersect*> Map;
 };
 
-struct AttribsToInterpolate
-{
-	const GA_Attribute *OldPAttrib;
-	GA_Attribute *PAttrib;
-	UT_Array<const GA_Attribute*> BasePtAttribs;
-	UT_Array<GA_Attribute*> PtAttribs;
-};
-
 struct CaptureAttributes
 {
 	bool MultipleSamples = false;
 	fpreal32 MinDistThresh = 0.001f;
-	GA_Attribute *RestP;
-	GA_Attribute *Prims;
-	GA_Attribute *UVWs;
-	GA_Attribute *Weights;
+	GA_Attribute *RestP = nullptr;
+	GA_Attribute *Prims = nullptr;
+	GA_Attribute *UVWs = nullptr;
+	GA_Attribute *Weights = nullptr;
+	bool XformRequired = false;
+	GA_Attribute *Xform = nullptr;
 };
 
 struct DriveAttribHandles

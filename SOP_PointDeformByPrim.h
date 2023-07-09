@@ -30,7 +30,8 @@ protected:
 	virtual int isRefInput(unsigned i) const override;
 
 private:
-	static PRM_ChoiceList s_pointattriblist;
+	static PRM_ChoiceList s_PieceAttribMenu;
+	static PRM_ChoiceList s_AttribsMenu;
 
 };
 

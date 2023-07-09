@@ -25,7 +25,7 @@ public:
 						GA_SplittableRange &&ptrange,
 						DriveAttribHandles &&drive_attrib_hs,
 						CaptureAttributes &capture_attribs, 
-						AttribsToInterpolate &attribs_to_interpolate);
+						const UT_Array<UT_StringHolder> &attribnames_to_interpolate);
 
 	struct TransformInfo
 	{
@@ -49,25 +49,26 @@ public:
 		UT_Matrix3F Rot;
 	};
 
-	THREADED_METHOD1(ThreadedPointDeform, myPtRange.canMultiThread(), captureClosestPoint, GU_RayIntersect&, ray_gdp);
-	void captureClosestPointPartial(GU_RayIntersect &ray_rest, const UT_JobInfo &info);
+	THREADED_METHOD1(ThreadedPointDeform, myPtRange.canMultiThread(), capture, GU_RayIntersect*, ray_gdp);
+	void capturePartial(GU_RayIntersect *ray_gdp, const UT_JobInfo &info);
 
-	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureClosestPointByPieceAttrib, GA_ROHandleI, piece_attrib_h, MapRay<int32>, rest_prim_rays);
-	void captureClosestPointByPieceAttribPartial(GA_ROHandleI piece_attrib_h, MapRay<int32> rest_prim_rays, const UT_JobInfo &info);
+	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureByPieceAttrib, 
+					 GA_ROHandleI, pieceattrib_h, MapRay<int32>, rest_prim_rays);
+	void captureByPieceAttribPartial(GA_ROHandleI pieceattrib_h, MapRay<int32> rest_prim_rays, const UT_JobInfo &info);
 
-	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureClosestPointByPieceAttrib,
-					 GA_ROHandleS, piece_attrib_h, MapRay<UT_StringHolder>, rest_prim_rays);
-	void captureClosestPointByPieceAttribPartial(GA_ROHandleS piece_attrib_h, MapRay<UT_StringHolder> rest_prim_rays, const UT_JobInfo &info);
+	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureByPieceAttrib, 
+					 GA_ROHandleS, pieceattrib_h, MapRay<UT_StringHolder>, rest_prim_rays);
+	void captureByPieceAttribPartial(GA_ROHandleS pieceattrib_h, MapRay<UT_StringHolder> rest_prim_rays, const UT_JobInfo &info);
 
-	THREADED_METHOD(ThreadedPointDeform, myPtRange.canMultiThread(), computeDeformation);
-	void computeDeformationPartial(const UT_JobInfo &info);
+	THREADED_METHOD(ThreadedPointDeform, myPtRange.canMultiThread(), deform);
+	void deformPartial(const UT_JobInfo &info);
 
-protected:
-	void buildXformByPrimIntrinsic(TransformInfo &trn_info, const GU_Detail *gdp);
-	void buildXformByAttribute(TransformInfo &trn_info,
-							   const GU_Detail *gdp,
-							   const GA_ROHandleV3 &normal_attrib_h,
-							   const GA_ROHandleV3 &up_attrib_h);
+private:
+	void pointCapture(GU_RayIntersect *ray_gdp, GA_Offset ptoff);
+	void buildXform(TransformInfo &trn_info, 
+					const GU_Detail *gdp, 
+					const GA_ROHandleV3 &normal_attrib_h, 
+					const GA_ROHandleV3 &up_attrib_h);
 
 private:
 	GU_Detail *myGdp = nullptr;
@@ -84,6 +85,8 @@ private:
 	GA_RWHandleT<UT_ValArray<int32>> myCapturePrimsh;
 	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureUVWsh;
 	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureWeightsh;
+	const bool myXformRequired;
+	GA_RWHandleM3 myXformh;
 	UT_Array<GA_ROHandleV3> myBasePtAttribsh;
 	UT_Array<GA_RWHandleV3> myPtAttribsh;
 
