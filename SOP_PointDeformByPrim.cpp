@@ -5,7 +5,6 @@
 
 #include <SOP/SOP_NodeVerb.h>
 #include <GU/GU_Detail.h>
-#include <GA/GA_AttributeRefMap.h>
 #include <DEP/DEP_MicroNode.h>
 #include <GU/GU_RayIntersect.h>
 #include <GA/GA_Handle.h>
@@ -15,31 +14,14 @@
 #include <PRM/PRM_TemplateBuilder.h>
 #include <UT/UT_DSOVersion.h>
 #include <UT/UT_Interrupt.h>
-#include <UT/UT_Vector.h>
 #include <UT/UT_Assert.h>
 #include <UT/UT_SysSpecific.h>
 #include <SYS/SYS_Math.h>
-#include <iostream>
-#include <limits.h>
 
 
 using namespace AKA;
 
-static UT_Array<UT_StringHolder>
-splitString(const char *string, char delim, const char *exclude=nullptr)
-{
-	UT_Array<UT_StringHolder> result;
-	std::stringstream ss(string);
-	std::string substring;
-	 
-	while (getline(ss, substring, delim))
-		if (substring != exclude)
-			result.emplace_back(substring);
-
-	return result;
-}
-
-const UT_StringHolder SOP_PointDeformByPrim::theSOPTypeName("hdk_pointdeformbyprim"_sh);
+const UT_StringHolder SOP_PointDeformByPrim::theSOPTypeName("pointdeformbyprim"_sh);
 
 void
 newSopOperator(OP_OperatorTable *table)
@@ -160,10 +142,6 @@ static const char* theDsFile = R"THEDSFILE(
 			help    "The name of a string or integer point attribute to use to treat the geometry as separate pieces. The attribute must be present on both the mesh and rest lattice. Points with the same value in this attribute are considered part of the same 'piece'. When you specify a valid piece attribute, this node deforms each piece using only the lattice points with the same piece value. \nThis lets you deform independent objects (pieces) in a single pass. You can create a piece attribute based on connectivity with the Connectivity SOP."
         }
 	}
-)THEDSFILE"
-// ==== This is necessary because MSVC++ has a limit of 16380 character per
-// ==== string literal
-R"THEDSFILE(
 	groupsimple {
         name    "deform_folder"
         label   "Deform"
@@ -285,12 +263,12 @@ private:
 	const char *currentParmsValue(const CookParms &cookparms) const;
 
 	template<typename T, typename V>
-	void constructRayGroups(const GU_Detail *rest_gdp, 
+	void constructRayGroups(const Gdps &gdps,
 							V pieceattrib_h, 
 							V rest_prim_pieceattrib_h, 
 							ThreadedPointDeform &threaded_ptdeform) const;
 
-	void findPieceAttrib(GU_Detail *gdp, 
+	void findPieceAttrib(const Gdps &gdps,
 						 const CookParms &cookparms, 
 						 const GA_AttributeOwner &attrib_owner, 
 						 ThreadedPointDeform &threaded_ptdeform) const;
@@ -326,13 +304,13 @@ SOP_PointDeformByPrimVerb::currentParmsValue(const CookParms &cookparms) const
 
 template<typename T, typename V>
 void
-SOP_PointDeformByPrimVerb::constructRayGroups(const GU_Detail *rest_gdp,
-															V pieceattrib_h,
-															V rest_prim_pieceattrib_h,
-															ThreadedPointDeform &threaded_ptdeform) const
+SOP_PointDeformByPrimVerb::constructRayGroups(const Gdps &gdps,
+											  V pieceattrib_h,
+											  V rest_prim_pieceattrib_h,
+											  ThreadedPointDeform &threaded_ptdeform) const
 {
 	MapPrimGroup<T> primgrp_map;
-	GA_Range rest_primrange(std::move(rest_gdp->getPrimitiveRange()));
+	GA_Range rest_primrange(std::move(gdps.RestGdp->getPrimitiveRange()));
 
 	T attrib_value;
 	for (GA_Iterator primitr(rest_primrange.begin()); primitr != rest_primrange.end(); ++primitr)
@@ -340,8 +318,8 @@ SOP_PointDeformByPrimVerb::constructRayGroups(const GU_Detail *rest_gdp,
 		attrib_value = rest_prim_pieceattrib_h.get(*primitr);
 		if (primgrp_map.Map.find(attrib_value) == primgrp_map.Map.end())
 		{
-			primgrp_map.Map[attrib_value] = rest_gdp->newDetachedPrimitiveGroup();
-			primgrp_map.Map.at(attrib_value)->addOffset(rest_gdp->primitiveOffset(*primitr));
+			primgrp_map.Map[attrib_value] = gdps.RestGdp->newDetachedPrimitiveGroup();
+			primgrp_map.Map.at(attrib_value)->addOffset(gdps.RestGdp->primitiveOffset(*primitr));
 		}
 		else
 			primgrp_map.Map.at(attrib_value)->addOffset(*primitr);
@@ -350,7 +328,7 @@ SOP_PointDeformByPrimVerb::constructRayGroups(const GU_Detail *rest_gdp,
 	MapRay<T> restprim_rays;
 	for (auto &kv : primgrp_map.Map)
 	{
-		GU_RayIntersect *ray = new GU_RayIntersect(rest_gdp, kv.second, true, false, true);
+		GU_RayIntersect *ray = new GU_RayIntersect(gdps.RestGdp, kv.second, true, false, true);
 		restprim_rays.Map[kv.first] = ray;
 	}
 
@@ -364,27 +342,25 @@ SOP_PointDeformByPrimVerb::constructRayGroups(const GU_Detail *rest_gdp,
 }
 
 void
-SOP_PointDeformByPrimVerb::findPieceAttrib(GU_Detail *gdp, 
+SOP_PointDeformByPrimVerb::findPieceAttrib(const Gdps &gdps, 
 										   const CookParms &cookparms, 
 										   const GA_AttributeOwner &attrib_owner, 
 										   ThreadedPointDeform &threaded_ptdeform) const
 {
 	auto &&sopparms = cookparms.parms<SOP_PointDeformByPrimParms>();
-	const GU_Detail *rest_gdp = cookparms.inputGeo(1);
-	const GU_Detail *deformed_gdp = cookparms.inputGeo(2);
 
 	const UT_StringHolder &pieceattrib_parmdata = sopparms.getPieceAttrib();
-	const GA_Attribute *restprim_pieceattrib = rest_gdp->findPrimitiveAttribute(pieceattrib_parmdata);
+	const GA_Attribute *restprim_pieceattrib = gdps.RestGdp->findPrimitiveAttribute(pieceattrib_parmdata);
 	const GA_AttributeType &restprim_pieceattribtype = restprim_pieceattrib->getType();
 
 	if (restprim_pieceattribtype.getTypeName() == "string")
 	{
-		GA_Attribute *pieceattrib = gdp->findStringTuple(attrib_owner, pieceattrib_parmdata, 1, 1);
+		GA_Attribute *pieceattrib = gdps.Gdp->findStringTuple(attrib_owner, pieceattrib_parmdata, 1, 1);
 		GA_ROHandleS pieceattrib_h(pieceattrib);
 		GA_ROHandleS rest_prim_pieceattrib_h(restprim_pieceattrib);
 
 		if (pieceattrib_h.isValid() && rest_prim_pieceattrib_h.isValid())
-			constructRayGroups<UT_StringHolder, GA_ROHandleS>(rest_gdp, pieceattrib_h, rest_prim_pieceattrib_h, threaded_ptdeform);
+			constructRayGroups<UT_StringHolder, GA_ROHandleS>(gdps, pieceattrib_h, rest_prim_pieceattrib_h, threaded_ptdeform);
 		else
 		{
 			cookparms.sopAddError(SOP_MESSAGE, "Only string/integer type is allowed for Piece attribute!\n");
@@ -393,12 +369,12 @@ SOP_PointDeformByPrimVerb::findPieceAttrib(GU_Detail *gdp,
 	}
 	else if (restprim_pieceattribtype.getTypeName() == "numeric")
 	{
-		GA_Attribute *pieceattrib = gdp->findIntTuple(attrib_owner, pieceattrib_parmdata, 1, 1);
+		GA_Attribute *pieceattrib = gdps.Gdp->findIntTuple(attrib_owner, pieceattrib_parmdata, 1, 1);
 		GA_ROHandleI pieceattrib_h(pieceattrib);
 		GA_ROHandleI rest_prim_pieceattrib_h(restprim_pieceattrib);
 
 		if (pieceattrib_h.isValid() && rest_prim_pieceattrib_h.isValid())
-			constructRayGroups<int32, GA_ROHandleI>(rest_gdp, pieceattrib_h, rest_prim_pieceattrib_h, threaded_ptdeform);
+			constructRayGroups<int32, GA_ROHandleI>(gdps, pieceattrib_h, rest_prim_pieceattrib_h, threaded_ptdeform);
 		else
 		{
 			cookparms.sopAddError(SOP_MESSAGE, "Only string/integer type is allowed for Piece attribute!\n");
@@ -415,10 +391,12 @@ SOP_PointDeformByPrimVerb::findPieceAttrib(GU_Detail *gdp,
 void
 SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 {
-	const GU_Detail *base_gdp = cookparms.inputGeo(0);
-	const GU_Detail *rest_gdp = cookparms.inputGeo(1);
-	const GU_Detail *deformed_gdp = cookparms.inputGeo(2);
-    if (base_gdp->isEmpty() || rest_gdp->isEmpty() || !rest_gdp->getNumPrimitives())
+	Gdps gdps;
+	gdps.BaseGdp = cookparms.inputGeo(0);
+	gdps.RestGdp = cookparms.inputGeo(1);
+	gdps.DeformedGdp = cookparms.inputGeo(2);
+
+    if (gdps.BaseGdp->isEmpty() || gdps.RestGdp->isEmpty() || !gdps.RestGdp->getNumPrimitives())
     {
         cookparms.sopAddError(SOP_MESSAGE, "First/Second input should contain valid geometry!\n");
         return;
@@ -433,19 +411,19 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
     }
 
 	auto &&sopparms = cookparms.parms<SOP_PointDeformByPrimParms>();
-	GU_Detail *gdp = cookparms.gdh().gdpNC();
+	gdps.Gdp = cookparms.gdh().gdpNC();
 
-	if (!deformed_gdp || deformed_gdp->isEmpty())
+	if (!gdps.DeformedGdp || gdps.DeformedGdp->isEmpty())
 		return;
 
-	if (rest_gdp->getNumPrimitives() != deformed_gdp->getNumPrimitives())
+	if (gdps.RestGdp->getNumPrimitives() != gdps.DeformedGdp->getNumPrimitives())
 	{
 		cookparms.sopAddWarning(SOP_MESSAGE, "Rest/deformed geometry cannot have different topology!\n");
 		return;
 	}
 
-	const GA_Primitive *rest_prim = rest_gdp->getPrimitive(rest_gdp->primitiveOffset(0));
-	const GA_Primitive *deformed_prim = deformed_gdp->getPrimitive(deformed_gdp->primitiveOffset(0));
+	const GA_Primitive *rest_prim = gdps.RestGdp->getPrimitive(gdps.RestGdp->primitiveOffset(0));
+	const GA_Primitive *deformed_prim = gdps.DeformedGdp->getPrimitive(gdps.DeformedGdp->primitiveOffset(0));
 	GA_Size rest_vtxcount = rest_prim->getVertexCount();
 	if (rest_vtxcount != deformed_prim->getVertexCount())
 	{
@@ -466,12 +444,11 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
     // get parms
 	const UT_StringHolder &group_parm = sopparms.getGroup();
-	//const int32 mode_parm = UTstatic_cast(int32, sopparms.getMode());
-	const bool drive_by_attribs = sopparms.getDriveByAttribs();
-	const UT_StringHolder &normal_attribparm = sopparms.getNormalAttrib();
-	const UT_StringHolder &up_attribparm = sopparms.getUpAttrib();
-	const bool multi_samples = sopparms.getMultipleSamples();
-	const fpreal32 min_dist_thresh = sopparms.getMinDistThresh();
+	const bool drivebyattribs_parm = sopparms.getDriveByAttribs();
+	const UT_StringHolder &normalattrib_parm = sopparms.getNormalAttrib();
+	const UT_StringHolder &upattrib_parm = sopparms.getUpAttrib();
+	const bool multisamples_parm = sopparms.getMultipleSamples();
+	const fpreal32 mindistthresh_parm = sopparms.getMinDistThresh();
 	const UT_StringHolder &piece_parm = sopparms.getPieceAttrib();
     const UT_StringHolder &attribs_parm = sopparms.getAttribs();
 
@@ -485,9 +462,9 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	GA_RWHandleS parms_value_h;
 	GA_RWHandleI base_meta_count_h;
 	GA_RWHandleI rest_meta_count_h;
-	parms_value_attrib = gdp->findAttribute(GA_ATTRIB_DETAIL, parms_value_name);
-	base_meta_count_attrib = gdp->findAttribute(GA_ATTRIB_DETAIL, base_meta_count_name);
-	rest_meta_count_attrib = gdp->findAttribute(GA_ATTRIB_DETAIL, rest_meta_count_name);
+	parms_value_attrib = gdps.Gdp->findAttribute(GA_ATTRIB_DETAIL, parms_value_name);
+	base_meta_count_attrib = gdps.Gdp->findAttribute(GA_ATTRIB_DETAIL, base_meta_count_name);
+	rest_meta_count_attrib = gdps.Gdp->findAttribute(GA_ATTRIB_DETAIL, rest_meta_count_name);
 
 	bool reinitialize = false;
 	const UT_StringHolder &cur_parms_value = currentParmsValue(cookparms);
@@ -500,8 +477,8 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 		rest_meta_count_h.bind(rest_meta_count_attrib);
 
 		reinitialize = cur_parms_value.compare(parms_value_h.get(0)) != 0 ||
-			base_meta_count_h.get(0) != base_gdp->getMetaCacheCount() ||
-			rest_meta_count_h.get(0) != rest_gdp->getMetaCacheCount();
+			base_meta_count_h.get(0) != gdps.BaseGdp->getMetaCacheCount() ||
+			rest_meta_count_h.get(0) != gdps.RestGdp->getMetaCacheCount();
 	}
 	else
 		reinitialize = true;
@@ -514,40 +491,47 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 	const UT_StringHolder &capture_xform_name("__capture_xform");
 
 	CaptureAttributes capture_attribs;
-	capture_attribs.MultipleSamples = multi_samples;
-	capture_attribs.MinDistThresh= min_dist_thresh;
+	CaptureAttributes_Info captureattribs_info;
+	captureattribs_info.CaptureMultiSamples = multisamples_parm;
+	captureattribs_info.CaptureMinDistThresh = mindistthresh_parm;
 
     if (reinitialize)
     {
-	    gdp->replaceWith(*base_gdp);
+	    gdps.Gdp->replaceWith(*gdps.BaseGdp);
 
-		parms_value_attrib = gdp->addStringTuple(GA_ATTRIB_DETAIL, parms_value_name, 1);
-		base_meta_count_attrib = gdp->addIntTuple(GA_ATTRIB_DETAIL, base_meta_count_name, 1);
-		rest_meta_count_attrib = gdp->addIntTuple(GA_ATTRIB_DETAIL, rest_meta_count_name, 1);
+		parms_value_attrib = gdps.Gdp->addStringTuple(GA_ATTRIB_DETAIL, parms_value_name, 1);
+		base_meta_count_attrib = gdps.Gdp->addIntTuple(GA_ATTRIB_DETAIL, base_meta_count_name, 1);
+		rest_meta_count_attrib = gdps.Gdp->addIntTuple(GA_ATTRIB_DETAIL, rest_meta_count_name, 1);
 		parms_value_h.bind(parms_value_attrib);
 		base_meta_count_h.bind(base_meta_count_attrib);
 		rest_meta_count_h.bind(rest_meta_count_attrib);
 		parms_value_h.set(0, cur_parms_value);
-		base_meta_count_h.set(0, base_gdp->getMetaCacheCount());
-		rest_meta_count_h.set(0, rest_gdp->getMetaCacheCount());
+		base_meta_count_h.set(0, gdps.BaseGdp->getMetaCacheCount());
+		rest_meta_count_h.set(0, gdps.RestGdp->getMetaCacheCount());
 
-		capture_attribs.RestP = gdp->addFloatTuple(GA_ATTRIB_POINT, rest_p_name, 3, (GA_Defaults)0.f, nullptr, nullptr, GA_STORE_REAL32);
+		capture_attribs.RestP = gdps.Gdp->addFloatTuple(GA_ATTRIB_POINT, rest_p_name, 3, (GA_Defaults)0.f, nullptr, nullptr, GA_STORE_REAL32);
 		capture_attribs.RestP->setTypeInfo(GA_TYPE_POINT);
-		capture_attribs.Prims = gdp->addIntArray(GA_ATTRIB_POINT, capture_prims_name, 1);
+		capture_attribs.Prims = gdps.Gdp->addIntArray(GA_ATTRIB_POINT, capture_prims_name, 1);
 		capture_attribs.Prims->setTypeInfo(GA_TYPE_NONARITHMETIC_INTEGER);
-		capture_attribs.UVWs = gdp->addFloatArray(GA_ATTRIB_POINT, capture_uvws_name, 2, nullptr, nullptr, GA_STORE_REAL16);
+		capture_attribs.UVWs = gdps.Gdp->addFloatArray(GA_ATTRIB_POINT, capture_uvws_name, 2, nullptr, nullptr, GA_STORE_REAL16);
 		capture_attribs.UVWs->setTypeInfo(GA_TYPE_VECTOR);
-		capture_attribs.Weights = gdp->addFloatArray(GA_ATTRIB_POINT, capture_weights_name, 1, nullptr, nullptr, GA_STORE_REAL16);
+		capture_attribs.Weights = gdps.Gdp->addFloatArray(GA_ATTRIB_POINT, capture_weights_name, 1, nullptr, nullptr, GA_STORE_REAL16);
     }
     else
     {
-		capture_attribs.RestP = gdp->findAttribute(GA_ATTRIB_POINT, rest_p_name);
-		capture_attribs.Prims = gdp->findAttribute(GA_ATTRIB_POINT, capture_prims_name);
-		capture_attribs.UVWs = gdp->findAttribute(GA_ATTRIB_POINT, capture_uvws_name);
-		capture_attribs.Weights = gdp->findAttribute(GA_ATTRIB_POINT, capture_weights_name);
+		capture_attribs.RestP = gdps.Gdp->findAttribute(GA_ATTRIB_POINT, rest_p_name);
+		capture_attribs.Prims = gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_prims_name);
+		capture_attribs.UVWs = gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_uvws_name);
+		capture_attribs.Weights = gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_weights_name);
     }
 
-	// create an array of point attrib names to interpolate
+	captureattribs_info.RestP_H.bind(capture_attribs.RestP);
+	captureattribs_info.CapturePrims_H.bind(capture_attribs.Prims);
+	captureattribs_info.CaptureUVWs_H.bind(capture_attribs.UVWs);
+	captureattribs_info.CaptureWeights_H.bind(capture_attribs.Weights);
+
+	// based on the attribs parameter,
+	// find any vector attribs to interpolate
 	UT_Array<UT_StringHolder> attribnames_to_interpolate;
 
 	if (attribs_parm)
@@ -556,7 +540,7 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
 		if (attribs_parm == "*")
 		{
-			const GA_AttributeDict &base_point_attribs = base_gdp->getAttributes().getDict(GA_ATTRIB_POINT);
+			const GA_AttributeDict &base_point_attribs = gdps.BaseGdp->getAttributes().getDict(GA_ATTRIB_POINT);
 			for (GA_AttributeDict::iterator pit(base_point_attribs.begin()); pit != base_point_attribs.end(); ++pit)
 			{
 				const GA_Attribute *cur_attrib = pit.attrib();
@@ -574,7 +558,7 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 			{
 				if (attribname != "P")
 				{
-					const GA_Attribute *cur_attrib = base_gdp->findAttribute(GA_ATTRIB_POINT, attribname.c_str());
+					const GA_Attribute *cur_attrib = gdps.BaseGdp->findAttribute(GA_ATTRIB_POINT, attribname.c_str());
 					if (cur_attrib && cur_attrib->getTupleSize() == 3 && 
 						types.find(cur_attrib->getTypeInfo()) != -1)
 						attribnames_to_interpolate.emplace_back(attribname);
@@ -584,29 +568,30 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
 		if (attribnames_to_interpolate.size())
 		{
-			capture_attribs.XformRequired = true;
+			captureattribs_info.XformRequired = true;
 
 			if (reinitialize)
 			{
-				capture_attribs.Xform = gdp->addFloatTuple(
+				capture_attribs.Xform = gdps.Gdp->addFloatTuple(
 					GA_ATTRIB_POINT, capture_xform_name, 9, (GA_Defaults)0.f, nullptr, nullptr, GA_STORE_REAL16);
 				capture_attribs.Xform->setTypeInfo(GA_TYPE_TRANSFORM);
 			}
 			else
-				capture_attribs.Xform = gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name);
+				capture_attribs.Xform = gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name);
 
 			capture_attribs.Xform->bumpDataId();
+			captureattribs_info.Xform_H.bind(capture_attribs.Xform);
 		}
 		else
 		{
-			if (gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name))
-				gdp->destroyAttribute(GA_ATTRIB_POINT, capture_xform_name);
+			if (gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name))
+				gdps.Gdp->destroyAttribute(GA_ATTRIB_POINT, capture_xform_name);
 		}
 	}
 	else
 	{
-		if (gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name))
-			gdp->destroyAttribute(GA_ATTRIB_POINT, capture_xform_name);
+		if (gdps.Gdp->findAttribute(GA_ATTRIB_POINT, capture_xform_name))
+			gdps.Gdp->destroyAttribute(GA_ATTRIB_POINT, capture_xform_name);
 	}
 
 	parms_value_attrib->bumpDataId();
@@ -619,18 +604,18 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 
 	GOP_Manager group_parser;
 	bool success = false;
-	const GA_PointGroup *point_group = group_parser.parsePointDetached(group_parm, base_gdp, false, success);
+	const GA_PointGroup *point_group = group_parser.parsePointDetached(group_parm, gdps.BaseGdp, false, success);
 
 	if (group_parm && !success)
 		cookparms.sopAddWarning(SOP_ERR_BADGROUP, group_parm);
 
-	DriveAttribHandles drive_attrib_hs;
-	if (drive_by_attribs)
+	DriveAttrib_Info drive_attrib_hs;
+	if (drivebyattribs_parm)
 	{
-		const GA_Attribute *rest_normal_attrib = rest_gdp->findAttribute(GA_ATTRIB_POINT, normal_attribparm);
-		const GA_Attribute *rest_up_attrib = rest_gdp->findAttribute(GA_ATTRIB_POINT, up_attribparm);
-		const GA_Attribute *deformed_normal_attrib = deformed_gdp->findAttribute(GA_ATTRIB_POINT, normal_attribparm);
-		const GA_Attribute *deformed_up_attrib = deformed_gdp->findAttribute(GA_ATTRIB_POINT, up_attribparm);
+		const GA_Attribute *rest_normal_attrib = gdps.RestGdp->findAttribute(GA_ATTRIB_POINT, normalattrib_parm);
+		const GA_Attribute *rest_up_attrib = gdps.RestGdp->findAttribute(GA_ATTRIB_POINT, upattrib_parm);
+		const GA_Attribute *deformed_normal_attrib = gdps.DeformedGdp->findAttribute(GA_ATTRIB_POINT, normalattrib_parm);
+		const GA_Attribute *deformed_up_attrib = gdps.DeformedGdp->findAttribute(GA_ATTRIB_POINT, upattrib_parm);
 
 		if (rest_normal_attrib && rest_up_attrib &&
 			deformed_normal_attrib && deformed_up_attrib)
@@ -648,21 +633,19 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 		}
 	}
 
-	GA_SplittableRange ptrange(std::move(gdp->getPointRange(point_group)));
-    ThreadedPointDeform threaded_ptdeform(
-		gdp, base_gdp, rest_gdp, deformed_gdp, std::move(ptrange), std::move(drive_attrib_hs), 
-		capture_attribs, attribnames_to_interpolate);
+	GA_SplittableRange ptrange(std::move(gdps.Gdp->getPointRange(point_group)));
+    ThreadedPointDeform threaded_ptdeform(gdps, &ptrange, &drive_attrib_hs, &captureattribs_info, attribnames_to_interpolate);
 	
     if (reinitialize)
     {
         if (piece_parm)
         {
-			if (rest_gdp->findPrimitiveAttribute(piece_parm))
+			if (gdps.RestGdp->findPrimitiveAttribute(piece_parm))
 			{
-				if (gdp->findAttribute(GA_ATTRIB_PRIMITIVE, piece_parm))
-					findPieceAttrib(gdp, cookparms, GA_ATTRIB_PRIMITIVE, threaded_ptdeform);
-				else if (gdp->findAttribute(GA_ATTRIB_POINT, piece_parm))
-					findPieceAttrib(gdp, cookparms, GA_ATTRIB_POINT, threaded_ptdeform);
+				if (gdps.Gdp->findAttribute(GA_ATTRIB_PRIMITIVE, piece_parm))
+					findPieceAttrib(gdps, cookparms, GA_ATTRIB_PRIMITIVE, threaded_ptdeform);
+				else if (gdps.Gdp->findAttribute(GA_ATTRIB_POINT, piece_parm))
+					findPieceAttrib(gdps, cookparms, GA_ATTRIB_POINT, threaded_ptdeform);
 				else
 				{
 					cookparms.sopAddError(SOP_MESSAGE, "Cannot find the Piece attribute on the first input!\n");
@@ -677,7 +660,7 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
         }
         else
         {
-            GU_RayIntersect ray_rest(rest_gdp, nullptr, true, false, true);
+            GU_RayIntersect ray_rest(gdps.RestGdp, nullptr, true, false, true);
             threaded_ptdeform.capture(&ray_rest);
         }
 	
@@ -685,17 +668,16 @@ SOP_PointDeformByPrimVerb::cook(const CookParms &cookparms) const
 		capture_attribs.Prims->bumpDataId();
 		capture_attribs.UVWs->bumpDataId();
 		capture_attribs.Weights->bumpDataId();
-
-		if (attribnames_to_interpolate.size())
+		if (captureattribs_info.XformRequired)
 			capture_attribs.Xform->bumpDataId();
 	
 		for (UT_StringHolder &attribname : attribnames_to_interpolate)
-			gdp->findAttribute(GA_ATTRIB_POINT, attribname)->bumpDataId();
+			gdps.Gdp->findAttribute(GA_ATTRIB_POINT, attribname)->bumpDataId();
     }
 		
 	threaded_ptdeform.deform();
-	gdp->getP()->bumpDataId();
+	gdps.Gdp->getP()->bumpDataId();
 
 	for (UT_StringHolder &attribname : attribnames_to_interpolate)
-		gdp->findAttribute(GA_ATTRIB_POINT, attribname)->bumpDataId();
+		gdps.Gdp->findAttribute(GA_ATTRIB_POINT, attribname)->bumpDataId();
 }

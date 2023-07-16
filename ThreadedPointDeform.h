@@ -18,13 +18,10 @@ namespace AKA
 class ThreadedPointDeform
 {
 public:
-	ThreadedPointDeform(GU_Detail *gdp,
-						const GU_Detail *baseGdp,
-						const GU_Detail *rest_gdp,
-						const GU_Detail *deformedGdp,
-						GA_SplittableRange &&ptrange,
-						DriveAttribHandles &&drive_attrib_hs,
-						CaptureAttributes &capture_attribs, 
+	ThreadedPointDeform(const Gdps &gdps,
+						GA_SplittableRange *ptrange,
+						DriveAttrib_Info *drive_attrib_hs,
+						CaptureAttributes_Info *captureattribs_info,
 						const UT_Array<UT_StringHolder> &attribnames_to_interpolate);
 
 	struct TransformInfo
@@ -49,18 +46,18 @@ public:
 		UT_Matrix3F Rot;
 	};
 
-	THREADED_METHOD1(ThreadedPointDeform, myPtRange.canMultiThread(), capture, GU_RayIntersect*, ray_gdp);
+	THREADED_METHOD1(ThreadedPointDeform, myPtRange->canMultiThread(), capture, GU_RayIntersect*, ray_gdp);
 	void capturePartial(GU_RayIntersect *ray_gdp, const UT_JobInfo &info);
 
-	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureByPieceAttrib, 
+	THREADED_METHOD2(ThreadedPointDeform, myPtRange->canMultiThread(), captureByPieceAttrib, 
 					 GA_ROHandleI, pieceattrib_h, MapRay<int32>, rest_prim_rays);
 	void captureByPieceAttribPartial(GA_ROHandleI pieceattrib_h, MapRay<int32> rest_prim_rays, const UT_JobInfo &info);
 
-	THREADED_METHOD2(ThreadedPointDeform, myPtRange.canMultiThread(), captureByPieceAttrib, 
+	THREADED_METHOD2(ThreadedPointDeform, myPtRange->canMultiThread(), captureByPieceAttrib, 
 					 GA_ROHandleS, pieceattrib_h, MapRay<UT_StringHolder>, rest_prim_rays);
 	void captureByPieceAttribPartial(GA_ROHandleS pieceattrib_h, MapRay<UT_StringHolder> rest_prim_rays, const UT_JobInfo &info);
 
-	THREADED_METHOD(ThreadedPointDeform, myPtRange.canMultiThread(), deform);
+	THREADED_METHOD(ThreadedPointDeform, myPtRange->canMultiThread(), deform);
 	void deformPartial(const UT_JobInfo &info);
 
 private:
@@ -71,22 +68,12 @@ private:
 					const GA_ROHandleV3 &up_attrib_h);
 
 private:
-	GU_Detail *myGdp = nullptr;
-	const GU_Detail *myBaseGdp = nullptr;
-	const GU_Detail *myRestGdp = nullptr;
-	const GU_Detail *myDeformedGdp = nullptr;
-	GA_SplittableRange &&myPtRange;
-	DriveAttribHandles &&myDriveAttribHs;
+	const Gdps &myGdps;
+	GA_SplittableRange *myPtRange;
+	DriveAttrib_Info *myDriveAttribHs;
+	CaptureAttributes_Info *myCaptureAttributes_Info;
 	GA_ROHandleV3 myBasePh;
 	GA_RWHandleV3 myPh;
-	GA_RWHandleV3 myOldPh;
-	const bool myCaptureMultiSamples;
-	const fpreal32 myCaptureMinDistThresh;
-	GA_RWHandleT<UT_ValArray<int32>> myCapturePrimsh;
-	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureUVWsh;
-	GA_RWHandleT<UT_ValArray<fpreal16>> myCaptureWeightsh;
-	const bool myXformRequired;
-	GA_RWHandleM3 myXformh;
 	UT_Array<GA_ROHandleV3> myBasePtAttribsh;
 	UT_Array<GA_RWHandleV3> myPtAttribsh;
 

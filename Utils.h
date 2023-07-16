@@ -24,19 +24,36 @@ struct MapRay
 	UT_Map<T, GU_RayIntersect*> Map;
 };
 
+struct Gdps
+{
+	GU_Detail *Gdp = nullptr;
+	const GU_Detail *BaseGdp = nullptr;
+	const GU_Detail *RestGdp = nullptr;
+	const GU_Detail *DeformedGdp = nullptr;
+};
+
 struct CaptureAttributes
 {
-	bool MultipleSamples = false;
-	fpreal32 MinDistThresh = 0.001f;
 	GA_Attribute *RestP = nullptr;
 	GA_Attribute *Prims = nullptr;
 	GA_Attribute *UVWs = nullptr;
 	GA_Attribute *Weights = nullptr;
-	bool XformRequired = false;
 	GA_Attribute *Xform = nullptr;
 };
 
-struct DriveAttribHandles
+struct CaptureAttributes_Info
+{
+	bool CaptureMultiSamples = false;
+	fpreal32 CaptureMinDistThresh = 0.001f;
+	GA_RWHandleV3 RestP_H;
+	GA_RWHandleT<UT_ValArray<int32>> CapturePrims_H;
+	GA_RWHandleT<UT_ValArray<fpreal16>> CaptureUVWs_H;
+	GA_RWHandleT<UT_ValArray<fpreal16>> CaptureWeights_H;
+	bool XformRequired = false;
+	GA_RWHandleM3 Xform_H;
+};
+
+struct DriveAttrib_Info
 {
 	bool Drive = false;
 	GA_ROHandleV3 RestNormal_H;

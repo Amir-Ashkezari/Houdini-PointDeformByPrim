@@ -7,35 +7,22 @@
 
 using namespace AKA;
 
-ThreadedPointDeform::ThreadedPointDeform(GU_Detail *gdp,
-										 const GU_Detail *base_gdp,
-										 const GU_Detail *rest_gdp,
-										 const GU_Detail *deformed_gdp,
-										 GA_SplittableRange &&ptrange,
-										 DriveAttribHandles &&drive_attrib_hs,
-										 CaptureAttributes &capture_attribs,
+ThreadedPointDeform::ThreadedPointDeform(const Gdps &gdps,
+										 GA_SplittableRange *ptrange,
+										 DriveAttrib_Info *drive_attrib_hs,
+										 CaptureAttributes_Info *captureattribs_info,
 										 const UT_Array<UT_StringHolder> &attribnames_to_interpolate)
-	: myGdp(gdp)
-	, myBaseGdp(base_gdp)
-	, myRestGdp(rest_gdp)
-	, myDeformedGdp(deformed_gdp)
-	, myPtRange(std::move(ptrange))
-	, myDriveAttribHs(std::move(drive_attrib_hs))
-	, myBasePh(base_gdp->getP())
-	, myPh(gdp->getP())
-	, myCaptureMultiSamples(capture_attribs.MultipleSamples)
-	, myCaptureMinDistThresh(capture_attribs.MinDistThresh)
-	, myOldPh(capture_attribs.RestP)
-	, myCapturePrimsh(capture_attribs.Prims)
-	, myCaptureUVWsh(capture_attribs.UVWs)
-	, myCaptureWeightsh(capture_attribs.Weights)
-	, myXformRequired(capture_attribs.XformRequired)
-	, myXformh(capture_attribs.Xform)
+	: myGdps(gdps)
+	, myPtRange(ptrange)
+	, myDriveAttribHs(drive_attrib_hs)
+	, myBasePh(gdps.BaseGdp->getP())
+	, myPh(gdps.Gdp->getP())
+	, myCaptureAttributes_Info(captureattribs_info)
 {
 	for (const UT_StringHolder &attribname : attribnames_to_interpolate)
 	{
-		myBasePtAttribsh.emplace_back(base_gdp->findAttribute(GA_ATTRIB_POINT, attribname));
-		myPtAttribsh.emplace_back(gdp->findAttribute(GA_ATTRIB_POINT, attribname));
+		myBasePtAttribsh.emplace_back(gdps.BaseGdp->findAttribute(GA_ATTRIB_POINT, attribname));
+		myPtAttribsh.emplace_back(gdps.Gdp->findAttribute(GA_ATTRIB_POINT, attribname));
 	}
 }
 
@@ -58,7 +45,8 @@ ThreadedPointDeform::pointCapture(GU_RayIntersect *ray_gdp, GA_Offset ptoff)
 	fpreal32 min_dist = min_dir.length();
 	min_dir.normalize();
 
-	if (min_dist > myCaptureMinDistThresh && myCaptureMultiSamples && !myDriveAttribHs.Drive)
+	if (min_dist > myCaptureAttributes_Info->CaptureMinDistThresh && 
+		myCaptureAttributes_Info->CaptureMultiSamples && !myDriveAttribHs->Drive)
 	{
 		UT_Vector3F x, y;
 		fpreal32 max_ray_dist, max_dist;
@@ -95,26 +83,25 @@ ThreadedPointDeform::pointCapture(GU_RayIntersect *ray_gdp, GA_Offset ptoff)
 			trn_info.CaptureWeights[i] *= delta;
 	}
 
-	buildXform(trn_info, myRestGdp, myDriveAttribHs.RestNormal_H, myDriveAttribHs.RestUp_H);
+	buildXform(trn_info, myGdps.RestGdp, myDriveAttribHs->RestNormal_H, myDriveAttribHs->RestUp_H);
 	trn_info.Rot.invert();
 
 	trn_info.Pos = myBasePh.get(ptoff);
 	trn_info.Pos -= trn_info.WeightedPos;
 	trn_info.Pos.rowVecMult(trn_info.Rot);
 
-	myOldPh.set(ptoff, trn_info.Pos);
-	myCapturePrimsh.set(ptoff, trn_info.CapturePrims);
-	myCaptureUVWsh.set(ptoff, trn_info.CaptureUVWs);
-	myCaptureWeightsh.set(ptoff, trn_info.CaptureWeights);
-
-	if (myXformRequired)
-		myXformh.set(ptoff, trn_info.Rot);
+	myCaptureAttributes_Info->RestP_H.set(ptoff, trn_info.Pos);
+	myCaptureAttributes_Info->CapturePrims_H.set(ptoff, trn_info.CapturePrims);
+	myCaptureAttributes_Info->CaptureUVWs_H.set(ptoff, trn_info.CaptureUVWs);
+	myCaptureAttributes_Info->CaptureWeights_H.set(ptoff, trn_info.CaptureWeights);
+	if (myCaptureAttributes_Info->XformRequired)
+		myCaptureAttributes_Info->Xform_H.set(ptoff, trn_info.Rot);
 }
 
 void
 ThreadedPointDeform::capturePartial(GU_RayIntersect *ray_gdp, const UT_JobInfo &info)
 {
-	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange->beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 
@@ -134,7 +121,7 @@ ThreadedPointDeform::captureByPieceAttribPartial(GA_ROHandleI pieceattrib_h,
 	const GA_Attribute *pieceattrib = pieceattrib_h.getAttribute();
 	const GA_AttributeOwner &pieceattrib_owner = pieceattrib->getOwner();
 
-	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange->beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 
@@ -146,7 +133,7 @@ ThreadedPointDeform::captureByPieceAttribPartial(GA_ROHandleI pieceattrib_h,
 				if (pieceattrib_owner == GA_ATTRIB_PRIMITIVE)
 				{
 					GA_OffsetArray prims;
-					myGdp->getPrimitivesReferencingPoint(prims, ptoff);
+					myGdps.Gdp->getPrimitivesReferencingPoint(prims, ptoff);
 					pieceattrib_val = pieceattrib_h.get(prims[0]);
 				}
 				else
@@ -169,7 +156,7 @@ ThreadedPointDeform::captureByPieceAttribPartial(GA_ROHandleS pieceattrib_h,
 	const GA_Attribute* pieceattrib = pieceattrib_h.getAttribute();
 	const GA_AttributeOwner& pieceattrib_owner = pieceattrib->getOwner();
 
-	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange->beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 
@@ -181,7 +168,7 @@ ThreadedPointDeform::captureByPieceAttribPartial(GA_ROHandleS pieceattrib_h,
 				if (pieceattrib_owner == GA_ATTRIB_PRIMITIVE)
 				{
 					GA_OffsetArray prims;
-					myGdp->getPrimitivesReferencingPoint(prims, ptoff);
+					myGdps.Gdp->getPrimitivesReferencingPoint(prims, ptoff);
 					pieceattrib_val = pieceattrib_h.get(prims[0]);
 				}
 				else
@@ -199,7 +186,7 @@ ThreadedPointDeform::captureByPieceAttribPartial(GA_ROHandleS pieceattrib_h,
 void
 ThreadedPointDeform::deformPartial(const UT_JobInfo &info)
 {
-	for (GA_PageIterator pit = myPtRange.beginPages(info); !pit.atEnd(); ++pit)
+	for (GA_PageIterator pit = myPtRange->beginPages(info); !pit.atEnd(); ++pit)
 	{
 		GA_Offset start, end;
 		for (GA_Iterator it(pit.begin()); it.blockAdvance(start, end);)
@@ -207,14 +194,14 @@ ThreadedPointDeform::deformPartial(const UT_JobInfo &info)
 			for (GA_Offset ptoff = start; ptoff < end; ++ptoff)
 			{
 				TransformInfo trn_info;
-				myCapturePrimsh.get(ptoff, trn_info.CapturePrims);
-				myCaptureUVWsh.get(ptoff, trn_info.CaptureUVWs);
-				myCaptureWeightsh.get(ptoff, trn_info.CaptureWeights);
+				myCaptureAttributes_Info->CapturePrims_H.get(ptoff, trn_info.CapturePrims);
+				myCaptureAttributes_Info->CaptureUVWs_H.get(ptoff, trn_info.CaptureUVWs);
+				myCaptureAttributes_Info->CaptureWeights_H.get(ptoff, trn_info.CaptureWeights);
 
-				buildXform(trn_info, myDeformedGdp, myDriveAttribHs.DeformedNormal_H, myDriveAttribHs.DeformedUp_H);
-				if (myXformRequired)
+				buildXform(trn_info, myGdps.DeformedGdp, myDriveAttribHs->DeformedNormal_H, myDriveAttribHs->DeformedUp_H);
+				if (myCaptureAttributes_Info->XformRequired)
 				{
-					UT_Matrix3F final_xform = myXformh.get(ptoff);
+					UT_Matrix3F final_xform = myCaptureAttributes_Info->Xform_H.get(ptoff);
 					final_xform *= trn_info.Rot;
 
 					for (size_t idx = 0; idx < myBasePtAttribsh.size(); ++idx)
@@ -226,7 +213,7 @@ ThreadedPointDeform::deformPartial(const UT_JobInfo &info)
 					}
 				}
 
-				trn_info.Pos = myOldPh.get(ptoff);
+				trn_info.Pos = myCaptureAttributes_Info->RestP_H.get(ptoff);
 				trn_info.Pos.rowVecMult(trn_info.Rot);
 				trn_info.Pos += trn_info.WeightedPos;
 				
@@ -248,21 +235,22 @@ ThreadedPointDeform::buildXform(TransformInfo &trn_info,
 	trn_info.WeightedPos = 0.f;
 	UT_Vector3F weighted_nrm(0.f), weighted_up(0.f);
 
-	for (int32 idx = 0; idx < trn_info.CapturePrims.size(); ++idx)
+	for (exint idx = 0; idx < trn_info.CapturePrims.size(); ++idx)
 	{
+		const exint vec2off = idx * 2;
 		const GEO_Primitive *geo_prim = gdp->getGEOPrimitive(prim_map.offsetFromIndex(trn_info.CapturePrims[idx]));
 		geo_prim->evaluateInteriorPoint(
-			trn_info.PrimPosition, trn_info.CaptureUVWs[idx * 2], trn_info.CaptureUVWs[idx * 2 + 1]);
+			trn_info.PrimPosition, trn_info.CaptureUVWs[vec2off], trn_info.CaptureUVWs[vec2off + 1]);
 		trn_info.Pos[0] = trn_info.PrimPosition[0];
 		trn_info.Pos[1] = trn_info.PrimPosition[1];
 		trn_info.Pos[2] = trn_info.PrimPosition[2];
 
-		if (myDriveAttribHs.Drive)
+		if (myDriveAttribHs->Drive)
 		{
 			UT_Array<GA_Offset> vtxoffsets;
 			UT_Array<fpreal32> weightlist;
 			geo_prim->computeInteriorPointWeights(
-				vtxoffsets, weightlist, trn_info.CaptureUVWs[idx * 2], trn_info.CaptureUVWs[idx * 2 + 1], 0.f);
+				vtxoffsets, weightlist, trn_info.CaptureUVWs[vec2off], trn_info.CaptureUVWs[vec2off + 1], 0.f);
 
 			trn_info.PrimNormal = 0.f;
 			trn_info.Up = 0.f;
@@ -275,7 +263,7 @@ ThreadedPointDeform::buildXform(TransformInfo &trn_info,
 		else
 		{
 			geo_prim->evaluateNormalVector(
-				trn_info.PrimNormal, trn_info.CaptureUVWs[idx * 2], trn_info.CaptureUVWs[idx * 2 + 1]);
+				trn_info.PrimNormal, trn_info.CaptureUVWs[vec2off], trn_info.CaptureUVWs[vec2off + 1]);
 			GA_Offset primpt_off = geo_prim->getPointOffset(0);
 			UT_Vector3F primpt_pos = temp_ph.get(primpt_off);
 			trn_info.Up = trn_info.Pos - primpt_pos;
