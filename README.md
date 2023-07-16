@@ -1,6 +1,6 @@
 # Point Deform By Prim
 
-A custom houdini operator, point deformation based on capturing primtive position of another geometry stream provides more accurate lookup position.
+A custom houdini SOP, point deformer based on capturing primitive position(s) from second/third geometry streams, provides more accurate lookup position(s).
 
 ### Build and the Installation
 
